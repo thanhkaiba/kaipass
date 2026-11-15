@@ -1,0 +1,64 @@
+name: Build and publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Needed to push the gh-pages branch and to attach files to a release.
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+      - name: Build web app
+        run: npm run build
+        env:
+          # Not a secret: an OAuth client ID is public by design. Set it under
+          # Settings → Secrets and variables → Actions → Variables.
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+
+      - name: Build browser extension
+        run: npm run build:ext
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+
+      # The site goes to the gh-pages branch and the extension to a release, so nothing here
+      # uses Actions artifact storage.
+      - name: Publish web app to the gh-pages branch
+        run: |
+          cd dist
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA}"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Publish extension to the "builds" release
+        run: |
+          (cd dist-ext && zip -qr ../kaipass-extension.zip .)
+          gh release delete builds --cleanup-tag --yes || true
+          gh release create builds kaipass-extension.zip \
+            --target "${GITHUB_SHA}" \
+            --title "Bản build mới nhất" \
+            --notes "Tự động tạo từ nhánh main. kaipass-extension.zip là extension cho Chrome/Edge: giải nén rồi nạp ở chrome://extensions (Load unpacked)."
+        env:
+          GH_TOKEN: ${{ github.token }}

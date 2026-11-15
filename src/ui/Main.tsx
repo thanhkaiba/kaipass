@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { currentTab, fillTab, matchesPage, openInTab, touch, type PageTab } from '../ext/browser';
+import { isExtension, isPopup } from '../lib/platform';
+import { autoLockMinutes } from '../lib/prefs';
 import type { Session, SyncStatus } from '../lib/session';
 import type { Item, ItemDraft, ItemType } from '../lib/vault';
-import { errorText, Icon, useToast } from './bits';
+import { copyText, errorText, Icon, useToast } from './bits';
 import { ItemEditor } from './ItemEditor';
 import { ItemView } from './ItemView';
-import { autoLockMinutes, Settings } from './Settings';
+import { Settings } from './Settings';
 import { blankDraft, TYPE_LABEL, TYPES } from './types';
 
 type Filter =
@@ -66,8 +69,14 @@ export function Main({
   const [pane, setPane] = useState<'nav' | 'list' | 'detail'>('list');
   const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [tab, setTab] = useState<PageTab | undefined>();
 
   useEffect(() => session.subscribe(() => setTick((t) => t + 1)), [session]);
+
+  // In the extension popup: find out which page we were opened on.
+  useEffect(() => {
+    currentTab().then(setTab, () => {});
+  }, []);
 
   // Sync when the app comes back to the foreground or the network returns.
   useEffect(() => {
@@ -85,10 +94,17 @@ export function Main({
     const minutes = autoLockMinutes();
     if (!minutes) return;
     let timer = setTimeout(() => onLock(session), minutes * 60_000);
+    let touched = 0;
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => onLock(session), minutes * 60_000);
+      // The extension popup does not live long enough to run that timer, so it also keeps a deadline.
+      if (isExtension && Date.now() - touched > 10_000) {
+        touched = Date.now();
+        void touch(minutes);
+      }
     };
+    reset();
     window.addEventListener('pointerdown', reset);
     window.addEventListener('keydown', reset);
     return () => {
@@ -150,6 +166,34 @@ export function Main({
     setDraft(null);
     setSelected(id);
     toast('Đã lưu');
+  };
+
+  const suggestions = useMemo(
+    () => (tab ? items.filter((i) => matchesPage(i, tab.host)) : []),
+    [items, tab],
+  );
+
+  const fill = async (item: Item) => {
+    if (!tab) return;
+    try {
+      const r = await fillTab(tab, item);
+      if (!r.username && !r.password && !r.otp) {
+        toast('Không tìm thấy ô đăng nhập trên trang này');
+      } else if (r.code && !r.otp) {
+        // The page has no code box yet (two-step logins ask for it on the next screen).
+        const copied = await copyText(r.code, true).then(
+          () => true,
+          () => false,
+        );
+        toast(copied ? 'Đã điền. Mã OTP đã được copy để dán ở bước sau' : 'Đã điền. Mở lại KaiPass ở bước sau để điền mã OTP');
+        setTimeout(() => window.close(), 1500);
+      } else {
+        toast('Đã điền');
+        setTimeout(() => window.close(), 400);
+      }
+    } catch (e) {
+      toast(`Không điền được: ${errorText(e)}`);
+    }
   };
 
   const addFolder = () => {
@@ -247,6 +291,11 @@ export function Main({
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+          {isPopup && (
+            <button type="button" className="iconbtn" onClick={openInTab} title="Mở trong tab" aria-label="Mở trong tab">
+              <Icon name="external" />
+            </button>
+          )}
           <div className="menu-wrap">
             <button type="button" className="primary" onClick={() => setAdding(!adding)} aria-expanded={adding}>
               <Icon name="plus" /> Thêm
@@ -262,6 +311,37 @@ export function Main({
             )}
           </div>
         </div>
+
+        {tab && !query && (
+          <div className="suggest" data-testid="suggestions">
+            <div className="suggest-title">Cho trang {tab.host}</div>
+            {suggestions.length === 0 && <p className="muted small">Chưa có đăng nhập nào lưu cho trang này.</p>}
+            {suggestions.map((i) => (
+              <div className="suggest-row" key={i.id}>
+                <button
+                  type="button"
+                  className="item"
+                  onClick={() => {
+                    setSelected(i.id);
+                    setDraft(null);
+                    setPane('detail');
+                  }}
+                >
+                  <span className="avatar">
+                    <Icon name={i.type} />
+                  </span>
+                  <span className="item-text">
+                    <span className="item-title">{i.title || '(không tên)'}</span>
+                    <span className="item-sub">{subtitle(i)}</span>
+                  </span>
+                </button>
+                <button type="button" className="primary" onClick={() => void fill(i)} aria-label={`Điền ${i.title}`}>
+                  Điền
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="list-title">
           <h2>{heading}</h2>
@@ -367,6 +447,7 @@ export function Main({
             change={change}
             onEdit={() => setDraft(current)}
             onBack={() => setPane('list')}
+            onFill={tab && matchesPage(current, tab.host) ? () => void fill(current) : undefined}
           />
         ) : (
           <div className="empty muted">

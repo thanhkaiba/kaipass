@@ -42,6 +42,7 @@ export function ItemView({
   change,
   onEdit,
   onBack,
+  onFill,
 }: {
   item: Item;
   vault: Vault;
@@ -49,6 +50,8 @@ export function ItemView({
   change: (fn: () => void | Promise<void>) => Promise<void>;
   onEdit: () => void;
   onBack: () => void;
+  /** Present in the extension popup when this item belongs to the page being viewed. */
+  onFill?: () => void;
 }) {
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -118,9 +121,20 @@ export function ItemView({
               >
                 <Icon name="trash" />
               </button>
-              <button type="button" className="primary" onClick={onEdit}>
-                <Icon name="edit" /> Sửa
-              </button>
+              {onFill ? (
+                <>
+                  <button type="button" className="iconbtn" onClick={onEdit} title="Sửa" aria-label="Sửa">
+                    <Icon name="edit" />
+                  </button>
+                  <button type="button" className="primary" onClick={onFill}>
+                    Điền vào trang
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="primary" onClick={onEdit}>
+                  <Icon name="edit" /> Sửa
+                </button>
+              )}
             </>
           )}
         </div>

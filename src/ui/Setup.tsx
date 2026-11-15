@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Drive, preloadGoogle } from '../lib/drive';
+import { isExtension } from '../lib/platform';
 import { FILE_NAME, Session } from '../lib/session';
 import { Vault } from '../lib/vault';
 import { errorText, Icon, passwordProblem, SecretInput, TextInput } from './bits';
@@ -17,6 +18,17 @@ export function rememberClientId(id: string): void {
 
 export const needsClientId = !ENV_CLIENT_ID;
 
+/** The extension signs in through a redirect address that must be registered with Google. */
+export function RedirectHint() {
+  if (!isExtension) return null;
+  return (
+    <p className="muted small">
+      Trong Google Cloud Console, thêm địa chỉ này vào <strong>Authorized redirect URIs</strong> của
+      OAuth client: <code className="wrap">{Drive.extensionRedirect()}</code>
+    </p>
+  );
+}
+
 type Step =
   | { k: 'choose' }
   | { k: 'local' }
@@ -25,7 +37,7 @@ type Step =
   | { k: 'drive-new'; drive: Drive }
   | { k: 'drive-existing'; drive: Drive; bytes: ArrayBuffer; remote: { id: string; rev: string } };
 
-export function Setup({ onReady }: { onReady: (s: Session) => void }) {
+export function Setup({ onReady }: { onReady: (s: Session, password: string) => void }) {
   const [step, setStep] = useState<Step>({ k: 'choose' });
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -35,7 +47,7 @@ export function Setup({ onReady }: { onReady: (s: Session) => void }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (step.k === 'drive') preloadGoogle().catch(() => {});
+    if (step.k === 'drive' && !isExtension) preloadGoogle().catch(() => {});
   }, [step.k]);
 
   const go = (next: Step) => {
@@ -67,10 +79,12 @@ export function Setup({ onReady }: { onReady: (s: Session) => void }) {
     e.preventDefault();
     if (step.k === 'local') {
       const password = newPassword();
-      if (password) void run(async () => onReady(await Session.adoptLocal(await Vault.create(password))));
+      if (password) {
+        void run(async () => onReady(await Session.adoptLocal(await Vault.create(password)), password));
+      }
     } else if (step.k === 'file') {
       if (!file) return setError('Chưa chọn file .kdbx');
-      void run(async () => onReady(await Session.adoptLocal(await Vault.open(await file.arrayBuffer(), pw))));
+      void run(async () => onReady(await Session.adoptLocal(await Vault.open(await file.arrayBuffer(), pw)), pw));
     } else if (step.k === 'drive') {
       const id = clientId.trim();
       if (!id) return setError('Cần nhập Google OAuth Client ID');
@@ -85,10 +99,12 @@ export function Setup({ onReady }: { onReady: (s: Session) => void }) {
     } else if (step.k === 'drive-new') {
       const password = newPassword();
       if (password) {
-        void run(async () => onReady(await Session.createOnDrive(await Vault.create(password), step.drive)));
+        void run(async () =>
+          onReady(await Session.createOnDrive(await Vault.create(password), step.drive), password),
+        );
       }
     } else if (step.k === 'drive-existing') {
-      void run(async () => onReady(await Session.adoptFromDrive(step.bytes, pw, step.drive, step.remote)));
+      void run(async () => onReady(await Session.adoptFromDrive(step.bytes, pw, step.drive, step.remote), pw));
     }
   };
 
@@ -142,6 +158,7 @@ export function Setup({ onReady }: { onReady: (s: Session) => void }) {
                 </p>
               </>
             )}
+            <RedirectHint />
             <button className="primary" disabled={busy}>
               {busy ? 'Đang kết nối…' : 'Đăng nhập Google'}
             </button>

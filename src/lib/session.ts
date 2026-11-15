@@ -1,4 +1,5 @@
 import { AuthNeeded, Drive } from './drive';
+import { memory } from './platform';
 import { kv } from './store';
 import { Vault, WrongPasswordError } from './vault';
 
@@ -27,7 +28,7 @@ export async function storedMeta(): Promise<Meta | undefined> {
 
 export async function wipeDevice(): Promise<void> {
   await kv.clear();
-  sessionStorage.clear();
+  await memory.clear();
 }
 
 /** An unlocked vault plus the bookkeeping that keeps the local copy and Drive in step. */
@@ -157,12 +158,13 @@ export class Session {
     this.syncing = true;
     this.error = '';
     try {
-      if (!drive.hasToken()) {
-        if (!interactive) {
+      if (!(await drive.hasToken())) {
+        if (interactive) {
+          await drive.signIn();
+        } else if (!(await drive.silent())) {
           this.status = 'auth';
           return;
         }
-        await drive.signIn();
       }
       this.status = 'syncing';
       this.emit();

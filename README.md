@@ -16,9 +16,10 @@ bạn. Không có server, không có phí hằng tháng.
 
 ## Giới hạn cần biết
 
-- **Web app không tự điền được vào app hay trang web khác.** Trên điện thoại, muốn tự điền thì mở
-  cùng file `kaipass.kdbx` trên Google Drive bằng KeePassium (iOS) hoặc KeePassDX / Keepass2Android
-  (Android). Trên máy tính, dùng nút copy.
+- **Tự điền trên máy tính cần cài extension** (xem bên dưới). Web app không tự điền được vào trang
+  khác.
+- **Trên điện thoại chưa có tự điền.** Tạm thời, mở cùng file `kaipass.kdbx` trên Google Drive bằng
+  KeePassium (iOS) hoặc KeePassDX / Keepass2Android (Android).
 - **Quên master password là mất dữ liệu.** Không có cách khôi phục.
 - Phiên đăng nhập Google hết hạn sau khoảng một giờ. Khi đó app vẫn dùng được, chỉ cần bấm
   "Đăng nhập Google để đồng bộ" một lần.
@@ -51,11 +52,16 @@ Tên menu trong Google Cloud Console có thể thay đổi đôi chút.
 
 ### 2. Đưa app lên GitHub Pages
 
-1. Trong repo: **Settings → Pages → Source: GitHub Actions**.
-2. **Settings → Secrets and variables → Actions → Variables**: tạo biến `GOOGLE_CLIENT_ID` với
-   Client ID ở trên. Nếu bỏ qua bước này, app sẽ hỏi Client ID khi kết nối Drive.
-3. Push lên nhánh `main`. Workflow `.github/workflows/deploy.yml` sẽ build và đăng app tại
-   `https://<tên-github>.github.io/<tên-repo>/`.
+Mỗi lần push lên `main`, workflow `.github/workflows/publish.yml` build app rồi đẩy bản build vào
+nhánh `gh-pages`.
+
+1. **Settings → Secrets and variables → Actions → Variables**: tạo biến `GOOGLE_CLIENT_ID` với
+   Client ID ở trên. Nếu bỏ qua, app sẽ hỏi Client ID khi kết nối Drive.
+2. **Settings → Pages → Source: Deploy from a branch**, chọn nhánh `gh-pages`, thư mục `/ (root)`.
+3. App chạy tại `https://<tên-github>.github.io/<tên-repo>/`.
+
+GitHub Pages cho repo private cần gói GitHub trả phí. Nếu bạn dùng gói Free, hãy chuyển repo sang
+public (mã nguồn không chứa dữ liệu của bạn), hoặc dùng Cloudflare Pages với thư mục build `dist`.
 
 ### 3. Dùng
 
@@ -63,6 +69,37 @@ Tên menu trong Google Cloud Console có thể thay đổi đôi chút.
 2. Trên thiết bị khác: mở cùng địa chỉ, chọn **Lưu trên Google Drive**, nhập master password.
 3. Cài như app: trên Chrome/Edge bấm biểu tượng cài đặt ở thanh địa chỉ; trên iPhone dùng
    Safari → Chia sẻ → **Thêm vào MH chính**.
+
+## Extension trình duyệt (tự điền mật khẩu và OTP)
+
+Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
+
+### Cài
+
+1. Tải `kaipass-extension.zip` ở mục **Releases → Bản build mới nhất** của repo, giải nén.
+   (Hoặc tự build: `npm run build:ext`, kết quả nằm ở `dist-ext/`.)
+2. Mở `chrome://extensions`, bật **Developer mode**, bấm **Load unpacked**, chọn thư mục vừa giải nén.
+3. Ghim biểu tượng KaiPass lên thanh công cụ.
+4. Để extension đồng bộ Google Drive, vào OAuth client đã tạo ở trên và thêm vào
+   **Authorized redirect URIs**: `https://eokdpgifmehmgjoelmomohkajehodpeg.chromiumapp.org/`
+5. Bấm biểu tượng KaiPass, chọn **Lưu trên Google Drive**, đăng nhập, nhập master password.
+
+### Dùng
+
+- Ở trang đăng nhập, bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`).
+  Các đăng nhập đã lưu cho trang đó hiện ở đầu danh sách; bấm **Điền**.
+- Extension điền tên đăng nhập, mật khẩu, và mã OTP nếu trang đang có ô nhập mã. Nếu ô nhập mã nằm
+  ở bước sau, mã OTP được copy sẵn để dán, hoặc mở lại KaiPass ở bước đó và bấm **Điền** lần nữa.
+- Một mục chỉ được gợi ý khi ô "Địa chỉ web" của nó trùng tên miền với trang đang mở.
+
+### Cần biết
+
+- Extension chỉ đọc trang khi bạn bấm vào nó (quyền `activeTab`), không chạy ngầm trên mọi trang.
+  Vì vậy chưa có ô gợi ý hiện ngay trong trường nhập, và chưa tự hỏi lưu mật khẩu mới.
+- Extension không điền vào khung (iframe) thuộc tên miền khác với trang.
+- Để không phải gõ master password mỗi lần mở, extension giữ nó trong bộ nhớ tạm của trình duyệt
+  (không ghi xuống đĩa) cho tới khi hết thời gian tự khoá, bấm **Khoá**, hoặc đóng trình duyệt.
+- Extension và web app là hai bản cài riêng, cùng đồng bộ với một file trên Drive.
 
 ## Chuyển từ 1Password
 
@@ -79,14 +116,17 @@ Khi người khác chia sẻ một mục từ 1Password kèm OTP, hãy nhờ h�
 
 ```sh
 npm install
-npm run dev        # chạy tại http://localhost:5173
-npm test           # kiểm tra phần lõi: mã hoá, OTP, nhập 1Password, gộp dữ liệu
-npm run build
-npm run e2e        # kiểm tra trên trình duyệt thật (cần Playwright + Chromium)
+npm run dev        # web app tại http://localhost:5173
+npm test           # phần lõi: mã hoá, OTP, nhập 1Password, gộp dữ liệu
+npm run build      # web app → dist/
+npm run build:ext  # extension → dist-ext/
+npm run e2e        # web app trên Chromium (cần Playwright)
+KAIPASS_TEST_HOSTS=1 npm run build:ext && npm run e2e:ext   # extension trên Chromium
 ```
 
-`npm run e2e` thay Google bằng bản giả lập, nên nó kiểm tra logic đồng bộ của app chứ không kiểm tra
-được việc đăng nhập Google thật.
+Hai bộ `e2e` thay Google bằng bản giả lập, nên chúng kiểm tra logic đồng bộ và tự điền của app chứ
+không kiểm tra được việc đăng nhập Google thật. Bản build extension dùng cho `e2e:ext` được cấp
+thêm quyền truy cập `localhost`; đừng dùng bản đó để cài thật.
 
 Mã nguồn chính:
 
@@ -95,4 +135,6 @@ Mã nguồn chính:
 - `src/lib/drive.ts`: đăng nhập Google và gọi Drive API
 - `src/lib/onepux.ts`: nhập file 1Password
 - `src/lib/totp.ts`: mã OTP
+- `src/ext/`: phần riêng của extension (tìm tab, điền vào trang)
 - `src/ui/`: giao diện
+- `extension/manifest.json`: khai báo extension

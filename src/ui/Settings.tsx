@@ -1,16 +1,12 @@
 import { useEffect, useState } from 'react';
+import { openInTab, remember } from '../ext/browser';
 import { Drive, preloadGoogle } from '../lib/drive';
 import { importOnePux, type ImportResult } from '../lib/onepux';
+import { isExtension, isPopup } from '../lib/platform';
+import { autoLockMinutes, setAutoLockMinutes } from '../lib/prefs';
 import { wipeDevice, type Session } from '../lib/session';
 import { downloadBytes, errorText, Modal, passwordProblem, SecretInput, TextInput, useToast } from './bits';
-import { needsClientId, rememberClientId, savedClientId } from './Setup';
-
-const AUTOLOCK_KEY = 'kaipass.autolock';
-
-export function autoLockMinutes(): number {
-  const v = Number(localStorage.getItem(AUTOLOCK_KEY) ?? 10);
-  return Number.isFinite(v) && v >= 0 ? v : 10;
-}
+import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
 export function Settings({
   session,
@@ -33,7 +29,7 @@ export function Settings({
   const [lockMin, setLockMin] = useState(autoLockMinutes);
 
   useEffect(() => {
-    if (meta.mode === 'local') preloadGoogle().catch(() => {});
+    if (meta.mode === 'local' && !isExtension) preloadGoogle().catch(() => {});
   }, [meta.mode]);
 
   const run = async (name: string, work: () => Promise<void>) => {
@@ -84,6 +80,7 @@ export function Settings({
       if (problem) throw new Error(problem);
       await vault.changePassword(newPw);
       await session.commit();
+      await remember(newPw, autoLockMinutes());
       setOldPw('');
       setNewPw('');
       setConfirm('');
@@ -110,6 +107,18 @@ export function Settings({
         </p>
       )}
 
+      {isPopup && (
+        <section>
+          <p className="warn small">
+            Cửa sổ nhỏ này tự đóng khi bạn chọn file. Để nhập từ 1Password hoặc đính kèm file, hãy mở
+            KaiPass trong tab.
+          </p>
+          <button type="button" onClick={openInTab}>
+            Mở KaiPass trong tab
+          </button>
+        </section>
+      )}
+
       <section>
         <h3>Nơi lưu</h3>
         {meta.mode === 'drive' ? (
@@ -134,6 +143,7 @@ export function Settings({
                 mono
               />
             )}
+            <RedirectHint />
             <button type="button" onClick={connectDrive} disabled={!!busy}>
               {busy === 'drive' ? 'Đang kết nối…' : 'Chuyển lên Google Drive'}
             </button>
@@ -206,7 +216,7 @@ export function Settings({
             onChange={(e) => {
               const v = Number(e.target.value);
               setLockMin(v);
-              localStorage.setItem(AUTOLOCK_KEY, String(v));
+              setAutoLockMinutes(v);
             }}
           >
             <option value={1}>1 phút</option>

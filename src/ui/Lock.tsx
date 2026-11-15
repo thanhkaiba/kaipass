@@ -8,7 +8,7 @@ export function Lock({
   onWiped,
 }: {
   meta: Meta;
-  onReady: (s: Session) => void;
+  onReady: (s: Session, password: string) => void;
   onWiped: () => void;
 }) {
   const [pw, setPw] = useState('');
@@ -20,7 +20,7 @@ export function Lock({
     setBusy(true);
     setError('');
     try {
-      onReady(await Session.unlock(pw));
+      onReady(await Session.unlock(pw), pw);
     } catch (err) {
       setError(errorText(err));
       setBusy(false);

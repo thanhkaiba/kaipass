@@ -3,11 +3,14 @@
  * user's Drive except files it created itself, and Drive only ever receives the encrypted vault.
  */
 
+import { isExtension, memory } from './platform';
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const google: any;
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const GIS_URL = 'https://accounts.google.com/gsi/client';
+const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const TOKEN_KEY = 'kaipass.gtoken';
@@ -51,42 +54,35 @@ function toRemote(f: any): RemoteFile {
 export class Drive {
   constructor(readonly clientId: string) {}
 
-  private token(): string | undefined {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-      if (saved && saved.clientId === this.clientId && saved.exp > Date.now() + 60_000) return saved.token;
-    } catch {
-      /* ignore */
-    }
+  private async token(): Promise<string | undefined> {
+    const saved = await memory.get<{ clientId: string; token: string; exp: number }>(TOKEN_KEY);
+    if (saved && saved.clientId === this.clientId && saved.exp > Date.now() + 60_000) return saved.token;
     return undefined;
   }
 
-  hasToken(): boolean {
-    return !!this.token();
+  async hasToken(): Promise<boolean> {
+    return !!(await this.token());
   }
 
-  /** Opens Google's consent popup. Must be called from a click handler. */
+  private async keep(token: string, expiresIn: number): Promise<void> {
+    await memory.set(TOKEN_KEY, { clientId: this.clientId, token, exp: Date.now() + expiresIn * 1000 });
+  }
+
+  /** Opens Google's consent window. On the web this must be called from a click handler. */
   async signIn(): Promise<void> {
+    if (isExtension) return this.extensionSignIn(true);
     await preloadGoogle();
-    await new Promise<void>((resolve, reject) => {
+    const r = await new Promise<any>((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
         client_id: this.clientId,
         scope: SCOPE,
         prompt: '',
-        callback: (r: any) => {
-          if (r.error) return reject(new Error(r.error_description || r.error));
-          if (!google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)) {
+        callback: (res: any) => {
+          if (res.error) return reject(new Error(res.error_description || res.error));
+          if (!google.accounts.oauth2.hasGrantedAllScopes(res, SCOPE)) {
             return reject(new Error('Bạn chưa cấp quyền Google Drive cho app'));
           }
-          sessionStorage.setItem(
-            TOKEN_KEY,
-            JSON.stringify({
-              clientId: this.clientId,
-              token: r.access_token,
-              exp: Date.now() + Number(r.expires_in) * 1000,
-            }),
-          );
-          resolve();
+          resolve(res);
         },
         error_callback: (e: any) =>
           reject(
@@ -101,21 +97,67 @@ export class Drive {
       });
       client.requestAccessToken();
     });
+    await this.keep(r.access_token, Number(r.expires_in));
   }
 
-  signOut(): void {
-    sessionStorage.removeItem(TOKEN_KEY);
+  /**
+   * Tries to get a fresh token without showing anything. Only the extension can do this;
+   * returns false when the user has to sign in by hand.
+   */
+  async silent(): Promise<boolean> {
+    if (!isExtension) return false;
+    try {
+      await this.extensionSignIn(false);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The address Google must be told to redirect to; shown to the user during setup. */
+  static extensionRedirect(): string {
+    return isExtension ? chrome.identity.getRedirectURL() : '';
+  }
+
+  private async extensionSignIn(interactive: boolean): Promise<void> {
+    const state = crypto.randomUUID();
+    const query = new URLSearchParams({
+      client_id: this.clientId,
+      response_type: 'token',
+      redirect_uri: Drive.extensionRedirect(),
+      scope: SCOPE,
+      state,
+    });
+    if (!interactive) query.set('prompt', 'none');
+    let back: string | undefined;
+    try {
+      back = await chrome.identity.launchWebAuthFlow({ url: `${AUTH_URL}?${query}`, interactive });
+    } catch (e) {
+      throw new Error(
+        `Đăng nhập Google thất bại${e instanceof Error && e.message ? `: ${e.message}` : ''}. Kiểm tra lại Client ID và địa chỉ redirect.`,
+      );
+    }
+    const reply = new URLSearchParams(new URL(back ?? 'https://invalid/').hash.slice(1));
+    const token = reply.get('access_token');
+    if (reply.get('state') !== state || !token) {
+      throw new Error(reply.get('error') || 'Google không trả về quyền truy cập');
+    }
+    await this.keep(token, Number(reply.get('expires_in') || 3600));
+  }
+
+  async signOut(): Promise<void> {
+    await memory.remove(TOKEN_KEY);
   }
 
   private async call(url: string, init: RequestInit = {}): Promise<Response> {
-    const token = this.token();
+    const token = await this.token();
     if (!token) throw new AuthNeeded();
     const res = await fetch(url, {
       ...init,
       headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      this.signOut();
+      await this.signOut();
       throw new AuthNeeded();
     }
     return res;
