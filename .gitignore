@@ -1,0 +1,5 @@
+node_modules
+dist
+*.kdbx
+*.1pux
+.env*

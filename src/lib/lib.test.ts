@@ -1,0 +1,234 @@
+import { strToU8, zipSync } from 'fflate';
+import { describe, expect, it } from 'vitest';
+import { generatePassword } from './generator';
+import { importOnePux } from './onepux';
+import { normalizeOtp, parseOtp, totp } from './totp';
+import { Vault, WrongPasswordError } from './vault';
+
+const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
+  type: 'login' as const,
+  title: 'GitHub',
+  username: 'me',
+  password: 'hunter2',
+  url: 'https://github.com',
+  notes: '',
+  otp: '',
+  fields: [],
+  tags: [],
+  favorite: false,
+  folderId: '',
+  ...over,
+});
+
+describe('totp', () => {
+  // RFC 6238 test vectors (SHA-1, 8 digits, secret "12345678901234567890").
+  const uri = 'otpauth://totp/x?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8';
+  it('matches RFC 6238 vectors', async () => {
+    expect(await totp(parseOtp(uri), 59_000)).toBe('94287082');
+    expect(await totp(parseOtp(uri), 1111111109_000)).toBe('07081804');
+    expect(await totp(parseOtp(uri), 20000000000_000)).toBe('65353130');
+  });
+  it('accepts a bare secret and rejects junk', async () => {
+    expect(await totp(parseOtp('gezd gnbv gy3t qojq gezd gnbv gy3t qojq'), 59_000)).toBe('287082');
+    expect(normalizeOtp('GEZDGNBVGY3TQOJQ', 'A B')).toBe(
+      'otpauth://totp/A%20B?secret=GEZDGNBVGY3TQOJQ&period=30&digits=6',
+    );
+    expect(() => parseOtp('not base32 !!')).toThrow();
+  });
+});
+
+describe('generator', () => {
+  it('honours length and character classes', () => {
+    const p = generatePassword({ length: 32, upper: true, lower: true, digits: true, symbols: false });
+    expect(p).toHaveLength(32);
+    expect(p).toMatch(/[A-Z]/);
+    expect(p).toMatch(/[a-z]/);
+    expect(p).toMatch(/[0-9]/);
+    expect(p).not.toMatch(/[^A-Za-z0-9]/);
+  });
+});
+
+describe('vault', () => {
+  it('round-trips items through encryption', async () => {
+    const v = await Vault.create('correct horse');
+    const folder = v.createFolder('Work');
+    const id = v.upsert(
+      draft({
+        type: 'card',
+        favorite: true,
+        folderId: folder,
+        tags: ['bank'],
+        otp: 'otpauth://totp/x?secret=GEZDGNBVGY3TQOJQ',
+        fields: [
+          { name: 'CVV', value: '123', secret: true },
+          { name: 'Hết hạn', value: '12/2030', secret: false },
+        ],
+      }),
+    );
+    await v.addAttachment(id, 'cccd.jpg', new Uint8Array([1, 2, 3]).buffer);
+    const bytes = await v.save();
+
+    await expect(Vault.open(bytes, 'wrong')).rejects.toBeInstanceOf(WrongPasswordError);
+    const again = await Vault.open(bytes, 'correct horse');
+    const item = again.item(id)!;
+    expect(item).toMatchObject({
+      type: 'card',
+      title: 'GitHub',
+      password: 'hunter2',
+      favorite: true,
+      folderName: 'Work',
+      tags: ['bank'],
+      otp: 'otpauth://totp/x?secret=GEZDGNBVGY3TQOJQ',
+      trashed: false,
+    });
+    expect(item.fields).toEqual([
+      { name: 'CVV', value: '123', secret: true },
+      { name: 'Hết hạn', value: '12/2030', secret: false },
+    ]);
+    expect(item.attachments).toEqual([{ name: 'cccd.jpg', size: 3 }]);
+    expect([...again.attachment(id, 'cccd.jpg')!]).toEqual([1, 2, 3]);
+  });
+
+  it('bins, restores and purges', async () => {
+    const v = await Vault.create('pw');
+    const id = v.upsert(draft());
+    v.remove(id);
+    expect(v.item(id)!.trashed).toBe(true);
+    v.restore(id);
+    expect(v.item(id)!.trashed).toBe(false);
+    v.remove(id);
+    v.remove(id);
+    expect(v.item(id)).toBeUndefined();
+  });
+
+  it('merges changes made on two devices', async () => {
+    const base = await Vault.create('pw');
+    const shared = base.upsert(draft({ title: 'Shared' }));
+    const bytes = await base.save();
+
+    const a = await Vault.open(bytes, 'pw');
+    const b = await Vault.open(bytes.slice(0), 'pw');
+    a.upsert(draft({ title: 'From A' }));
+    await new Promise((r) => setTimeout(r, 1100)); // KDBX timestamps have 1 s resolution
+    b.upsert(draft({ title: 'From B' }));
+    b.upsert({ ...b.item(shared)!, password: 'changed-on-b' });
+
+    await a.merge(await b.save());
+    const titles = a.items().map((i) => i.title).sort();
+    expect(titles).toEqual(['From A', 'From B', 'Shared']);
+    expect(a.item(shared)!.password).toBe('changed-on-b');
+  });
+
+  it('changes the master password', async () => {
+    const v = await Vault.create('old');
+    await v.changePassword('new');
+    expect(await v.checkPassword('new')).toBe(true);
+    expect(await v.checkPassword('old')).toBe(false);
+    const bytes = await v.save();
+    await expect(Vault.open(bytes, 'old')).rejects.toBeInstanceOf(WrongPasswordError);
+    await Vault.open(bytes, 'new');
+  });
+});
+
+describe('1pux import', () => {
+  it('maps logins, cards, OTP, extra fields and files', async () => {
+    const data = {
+      accounts: [
+        {
+          vaults: [
+            {
+              attrs: { name: 'Personal' },
+              items: [
+                {
+                  uuid: 'a',
+                  favIndex: 1,
+                  state: 'active',
+                  categoryUuid: '001',
+                  overview: {
+                    title: 'Example',
+                    url: 'https://example.com',
+                    urls: [{ url: 'https://example.com' }, { url: 'https://alt.example.com' }],
+                    tags: ['work'],
+                  },
+                  details: {
+                    loginFields: [
+                      { designation: 'username', value: 'alice' },
+                      { designation: 'password', value: 's3cret' },
+                    ],
+                    notesPlain: 'hello',
+                    sections: [
+                      {
+                        title: 'Security',
+                        fields: [
+                          { title: 'one-time password', value: { totp: 'GEZDGNBVGY3TQOJQ' } },
+                          { title: 'recovery key', value: { concealed: 'AAAA-BBBB' } },
+                          { title: 'scan', value: { file: { documentId: 'doc1', fileName: 'scan.txt' } } },
+                        ],
+                      },
+                    ],
+                  },
+                },
+                {
+                  uuid: 'b',
+                  state: 'archived',
+                  categoryUuid: '002',
+                  overview: { title: 'Visa' },
+                  details: {
+                    sections: [
+                      {
+                        title: '',
+                        fields: [
+                          { title: 'number', value: { creditCardNumber: '4111111111111111' } },
+                          { title: 'expiry date', value: { monthYear: 203012 } },
+                          { title: 'valid from', value: { date: 1704067200 } },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const zip = zipSync({
+      'export.data': strToU8(JSON.stringify(data)),
+      'files/doc1__scan.txt': strToU8('file body'),
+    });
+    const v = await Vault.create('pw');
+    const res = await importOnePux(v, zip);
+    expect(res).toEqual({ items: 2, attachments: 1, skipped: [] });
+
+    const login = v.items().find((i) => i.title === 'Example')!;
+    expect(login).toMatchObject({
+      type: 'login',
+      username: 'alice',
+      password: 's3cret',
+      url: 'https://example.com',
+      notes: 'hello',
+      favorite: true,
+      tags: ['work'],
+      folderName: '',
+    });
+    expect(login.otp).toContain('secret=GEZDGNBVGY3TQOJQ');
+    expect(login.fields).toEqual([
+      { name: 'KP2A_URL_1', value: 'https://alt.example.com', secret: false },
+      { name: 'Security: recovery key', value: 'AAAA-BBBB', secret: true },
+    ]);
+    expect(new TextDecoder().decode(v.attachment(login.id, 'scan.txt'))).toBe('file body');
+
+    const card = v.items().find((i) => i.title === 'Visa')!;
+    expect(card).toMatchObject({ type: 'card', folderName: 'Archive' });
+    expect(card.fields).toEqual([
+      { name: 'number', value: '4111111111111111', secret: true },
+      { name: 'expiry date', value: '12/2030', secret: false },
+      { name: 'valid from', value: '2024-01-01', secret: false },
+    ]);
+  });
+
+  it('rejects files that are not 1pux', async () => {
+    const v = await Vault.create('pw');
+    await expect(importOnePux(v, strToU8('nope'))).rejects.toThrow();
+  });
+});
