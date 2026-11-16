@@ -77,6 +77,8 @@ export interface FillEntry {
   password: string;
   otp: string;
   hosts: string[];
+  /** A logo the user picked for this item (see LogoOverride in lib/brandMatch). */
+  logo?: { b?: string; t?: string; h?: string; l?: string };
 }
 
 export interface InlinePrefs {

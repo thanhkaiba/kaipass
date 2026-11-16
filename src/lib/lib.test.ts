@@ -7,7 +7,7 @@ import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from
 import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongRecoveryKey } from './recovery';
 import { matchScore } from '../ext/match';
 import * as brandData from '../icons/brands';
-import { brandFor, faviconUrls, inkOn } from './brandMatch';
+import { brandFor, faviconUrls, inkOn, parseOverrides, resolveOverride } from './brandMatch';
 import { otpFromQrText } from './qr';
 import { buildKit, extractKey } from './recoveryKit';
 import { Vault, WrongPasswordError } from './vault';
@@ -419,6 +419,11 @@ describe('site logos', () => {
     expect(id('GitHub - theo', '')).toBe('github');
     expect(id('Vietcombank', '')).toBe('vietcombank');
     expect(id('Google (công việc)', 'https://sso.mycompany.com')).toBe('google');
+    expect(id('Visa VCB', '')).toBe('vietcombank');
+    expect(id('Tài khoản Google công ty', '')).toBe('google');
+    expect(id('Notion', '')).toBe('notion');
+    expect(id('FB cá nhân', '')).toBe('facebook');
+    expect(id('Gói cước 4G 30 MB', '')).toBeNull();
     expect(id('Line', '')).toBeNull();
     expect(id('Signal', '')).toBeNull();
     expect(id('Wifi nhà', '')).toBeNull();
@@ -443,5 +448,15 @@ describe('site logos', () => {
     ]);
     expect(faviconUrls('example.com', 'ddg')).toEqual(['https://icons.duckduckgo.com/ip3/example.com.ico']);
     expect(faviconUrls('androidapp://com.x', 'site')).toEqual([]);
+  });
+
+  it('reads logos the user accepted from Claude, ignoring bad ones', () => {
+    expect(parseOverrides('not json')).toEqual({});
+    expect(parseOverrides('[1]')).toEqual({});
+    expect(resolveOverride(brandData, { b: 'github' })?.title).toBe('GitHub');
+    expect(resolveOverride(brandData, { t: 'Viettel Money', h: 'ee0033', l: 'VM' })).toMatchObject({ id: 'custom', hex: 'EE0033', letter: 'VM' });
+    expect(resolveOverride(brandData, { b: 'nope' })).toBeNull();
+    expect(resolveOverride(brandData, { t: 'X', h: 'red', l: 'X' })).toBeNull();
+    expect(resolveOverride(brandData, undefined)).toBeNull();
   });
 });

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Avatar, defaultIconSvg } from './bits';
 import { setFavicons, setLogos, useBrandPrefs, type FaviconSource } from './brands';
+import { LogoAssist } from './LogoAssist';
 import { Setting, Switch } from './Settings';
+import type { Session } from '../lib/session';
 import { ACCENTS, EMOJI, getAccent, loadPack, PACKS, setAccent, setPack, useIconPack, type PackId } from './iconPack';
 
 const PREVIEW = ['lock', 'key', 'star', 'card', 'cloud', 'sparkle'];
@@ -51,7 +53,7 @@ const FAVICON_INFO: Record<FaviconSource, string> = {
   ddg: 'Nhanh, đủ icon hơn. DuckDuckGo sẽ thấy danh sách tên trang trong vault (không thấy tài khoản hay mật khẩu).',
 };
 
-function BrandSettings() {
+function BrandSettings({ session, onOpenAi }: { session: Session; onOpenAi: () => void }) {
   const { logos, favicons } = useBrandPrefs();
   return (
     <div className="stack">
@@ -83,16 +85,17 @@ function BrandSettings() {
           <option value="ddg">Qua DuckDuckGo</option>
         </select>
       </Setting>
+      <LogoAssist session={session} onOpenAi={onOpenAi} />
     </div>
   );
 }
 
-export function LookSettings() {
+export function LookSettings({ session, onOpenAi }: { session: Session; onOpenAi: () => void }) {
   const pack = useIconPack();
   const [accent, setAcc] = useState(getAccent);
   return (
     <>
-      <BrandSettings />
+      <BrandSettings session={session} onOpenAi={onOpenAi} />
       <div className="stack">
         <h3>Bộ icon</h3>
         <div className="packs" role="radiogroup" aria-label="Bộ icon">

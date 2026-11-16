@@ -140,3 +140,79 @@ export async function extractItems(opts: {
     };
   });
 }
+
+// ---- "Find logos with Claude" ----
+
+export interface LogoQuestion {
+  title: string;
+  /** The item's web site, or '' when it has none. */
+  host: string;
+}
+
+export interface LogoAnswer {
+  /** Index into the questions. */
+  n: number;
+  /** A bundled logo id, or '' when none fits. */
+  brand: string;
+  /** The service's name, '' when the item is not a known service (Wi-Fi, ID card, …). */
+  name: string;
+  /** Brand colour as RRGGBB, '' when unsure. */
+  color: string;
+  /** One to three characters the brand is known by. */
+  letter: string;
+}
+
+const Logos = z.object({
+  items: z.array(
+    z.object({ n: z.number(), brand: z.string(), name: z.string(), color: z.string(), letter: z.string() }),
+  ),
+});
+
+const LOGO_SYSTEM = `You label password-manager items with the logo of the service they belong to.
+
+You get a catalogue of logos ("id: Brand name") and a numbered list of items ("n | title | site"). Titles are written by the user, often in Vietnamese, and may describe the service rather than name it ("Tài khoản ngân hàng ACB", "mail công ty", "wifi nhà"). The site may be empty.
+
+For every item return one entry with its n:
+- brand: the catalogue id when the item clearly belongs to that service (its site is that service's, or its title names it). Otherwise "".
+- name: the real company or service the item belongs to, short ("Techcombank", "Garena", "Viettel Money"). "" when the item is not tied to an identifiable service (home Wi-Fi, ID card, a personal note, an internal company tool you cannot identify).
+- color: when brand is "" but name is set and you know the brand's main colour with confidence, that colour as six hex digits without "#". Otherwise "".
+- letter: when color is set, the one to three characters the brand uses as its short form or initial ("V" for Vietcombank, "MB" for MB Bank). Otherwise "".
+
+Never guess a brand from a vague title. Prefer "" to a wrong logo.`;
+
+/** Asks Claude which service each item belongs to. Only titles and site names are sent. */
+export async function suggestLogos(opts: {
+  apiKey: string;
+  model: string;
+  items: LogoQuestion[];
+  catalogue: { id: string; title: string }[];
+}): Promise<LogoAnswer[]> {
+  const catalogue = opts.catalogue.map((b) => `${b.id}: ${b.title}`).join('\n');
+  const clean = (s: string) => s.replace(/[\r\n|]+/g, ' ').trim().slice(0, 120);
+  const answers: LogoAnswer[] = [];
+  const BATCH = 150;
+  for (let start = 0; start < opts.items.length; start += BATCH) {
+    const batch = opts.items.slice(start, start + BATCH);
+    const list = batch.map((q, i) => `${i} | ${clean(q.title)} | ${clean(q.host)}`).join('\n');
+    let response;
+    try {
+      response = await client(opts.apiKey).beta.messages.parse({
+        model: opts.model,
+        max_tokens: 16000,
+        system: [{ type: 'text', text: `${LOGO_SYSTEM}\n\n<catalogue>\n${catalogue}\n</catalogue>`, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: `<items>\n${list}\n</items>` }],
+        output_config: { effort: 'low', format: betaZodOutputFormat(Logos) },
+      });
+    } catch (e) {
+      explain(e);
+    }
+    if (response.stop_reason === 'refusal') throw new AiError('Claude từ chối xử lý danh sách này');
+    if (response.stop_reason === 'max_tokens') throw new AiError('Danh sách quá dài, thử lại');
+    const parsed = response.parsed_output;
+    if (!parsed) throw new AiError('Claude trả về kết quả không đọc được, thử lại');
+    for (const a of parsed.items) {
+      if (Number.isInteger(a.n) && a.n >= 0 && a.n < batch.length) answers.push({ ...a, n: a.n + start });
+    }
+  }
+  return answers;
+}

@@ -28,7 +28,7 @@ function withSession(password: string, work: (s: Session) => Promise<boolean>): 
     try {
       const changed = await work(session);
       if (changed) {
-        await writeFillIndex(session.vault.items());
+        await writeFillIndex(session.vault);
         await chrome.storage.session.set({ [BUMP_KEY]: Date.now() });
       }
       return changed;

@@ -13,6 +13,8 @@ import type { OtpAccount } from '../lib/qr';
 import { AiPasteDialog } from './AiPaste';
 import { QrScanDialog } from './QrScan';
 import { Settings, type Tab as SettingsTab } from './Settings';
+import { setLogoOverrides } from './brands';
+import { LOGO_SETTING, parseOverrides } from '../lib/brandMatch';
 import { ImportShareDialog } from './Share';
 import { blankDraft, TYPE_LABEL, TYPES } from './types';
 
@@ -104,6 +106,9 @@ export function Main({
   }, [session]);
 
   useEffect(() => session.subscribe(() => setTick((t) => t + 1)), [session]);
+  // Logos the user accepted per item live in the vault and follow its syncs.
+  useEffect(() => setLogoOverrides(parseOverrides(vault.getSetting(LOGO_SETTING))), [vault, tick]);
+  useEffect(() => () => setLogoOverrides({}), []);
 
   // In the extension popup: find out which page we were opened on.
   useEffect(() => {
@@ -291,7 +296,7 @@ export function Main({
 
   const itemButton = (i: Item, active: boolean) => (
     <button type="button" className={`item${active ? ' active' : ''}`} onClick={() => open(i)}>
-      <Avatar title={i.title} icon={i.type} url={i.url} />
+      <Avatar title={i.title} icon={i.type} url={i.url} id={i.id} />
       <span className="item-text">
         <span className="item-title">{i.title || '(không tên)'}</span>
         <span className="item-sub">{subtitle(i)}</span>

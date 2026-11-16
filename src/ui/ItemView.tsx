@@ -81,7 +81,7 @@ export function ItemView({
     <div className="detail">
       <header className="detail-head">
         <IconButton icon="back" label="Quay lại danh sách" className="only-narrow" onClick={onBack} />
-        <Avatar title={item.title} icon={item.type} url={item.url} size={48} />
+        <Avatar title={item.title} icon={item.type} url={item.url} id={item.id} size={48} />
         <div className="detail-title">
           <h2>{item.title || '(không tên)'}</h2>
           <div className="detail-meta">

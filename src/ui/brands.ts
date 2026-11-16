@@ -4,7 +4,7 @@
  * (Settings → Appearance). The logo data is a separate chunk, loaded once at start-up.
  */
 import { useSyncExternalStore } from 'react';
-import { brandFor, type BrandData, type FaviconSource } from '../lib/brandMatch';
+import { brandFor, resolveOverride, type BrandData, type FaviconSource, type LogoOverride } from '../lib/brandMatch';
 
 export { faviconUrls, inkOn, type Brand, type FaviconSource } from '../lib/brandMatch';
 
@@ -29,9 +29,10 @@ function write(key: string, value: string): void {
   }
 }
 
-type State = { data: Data | null; logos: boolean; favicons: FaviconSource };
+type State = { data: Data | null; logos: boolean; favicons: FaviconSource; overrides: Record<string, LogoOverride> };
 let state: State = {
   data: null,
+  overrides: {},
   logos: read(BRANDS_KEY) !== 'off',
   favicons: (['site', 'ddg'] as const).find((v) => v === read(FAVICON_KEY)) ?? 'off',
 };
@@ -40,6 +41,11 @@ const set = (patch: Partial<State>) => {
   state = { ...state, ...patch };
   listeners.forEach((l) => l());
 };
+
+/** Logos the user accepted per item, from the open vault. */
+export function setLogoOverrides(overrides: Record<string, LogoOverride>): void {
+  if (JSON.stringify(overrides) !== JSON.stringify(state.overrides)) set({ overrides });
+}
 
 export function setLogos(on: boolean): void {
   write(BRANDS_KEY, on ? 'on' : 'off');
@@ -72,9 +78,10 @@ export const loadBrands = (): Promise<Data> =>
 void loadBrands().catch(() => {});
 
 /** The logo for an item, or null when logos are off, still loading, or the site is not known. */
-export function useBrand(title: string, url: string): ReturnType<typeof brandFor> {
-  const { data, logos } = useBrandPrefs();
-  return data && logos ? brandFor(data, title, url) : null;
+export function useBrand(title: string, url: string, itemId?: string): ReturnType<typeof brandFor> {
+  const { data, logos, overrides } = useBrandPrefs();
+  if (!data || !logos) return null;
+  return (itemId && resolveOverride(data, overrides[itemId])) || brandFor(data, title, url);
 }
 
 /** Icon addresses that failed this session, so a list of items does not retry them on every render. */

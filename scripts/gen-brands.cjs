@@ -227,7 +227,10 @@ const COLOURS = {
 };
 
 // Words too common to name a brand from an item's title alone ("Line", "Signal", "X", …).
-const NOT_FROM_TITLE = new Set(['x', 'line', 'signal', 'medium', 'grab', 'steam', 'zoom', 'render', 'railway', 'expo', 'unity', 'meta', 'visa', 'wise', 'miro', 'ea', 'threads', 'claude', 'cursor', 'proton', 'apple', 'notion', 'docker']);
+const NOT_FROM_TITLE = new Set(['x', 'line', 'signal', 'medium', 'steam', 'render', 'railway', 'expo', 'unity', 'meta', 'visa', 'wise', 'miro', 'ea', 'threads', 'proton']);
+
+// Short names people write in titles.
+const ALIASES = { vcb: 'vietcombank', tcb: 'techcombank', ctg: 'vietinbank', mb: 'mbbank', tpb: 'tpbank', vpb: 'vpbank', fb: 'facebook', gg: 'google', yt: 'youtube', ig: 'instagram', gh: 'github', ms: 'microsoft', aws: 'aws', gpt: 'chatgpt', appleid: 'apple', gmail: 'gmail' };
 
 const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
@@ -260,6 +263,7 @@ for (const [id, [title, hex, letter, rule]] of Object.entries(COLOURS)) {
   brands[id] = [title, hex, '', letter];
   add(id, rule, title);
 }
+for (const [a, id] of Object.entries(ALIASES)) titles[a] = id;
 if (missing.length) {
   console.error('Not in Simple Icons:', missing.join(' '));
   process.exit(1);

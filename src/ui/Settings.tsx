@@ -565,7 +565,7 @@ export function Settings({
                 />
               )}
 
-              {tab === 'look' && <LookSettings />}
+              {tab === 'look' && <LookSettings session={session} onOpenAi={() => setTab('ai')} />}
 
               {tab === 'device' && (
                 <WipeSection
@@ -662,7 +662,7 @@ function AiSettings({
           icon="key"
           on={!!apiKey}
           title="Claude API key"
-          info="Dùng cho tính năng Dán tin nhắn. Key được lưu trong vault (đã mã hoá) và đồng bộ cùng vault. Lấy key ở console.anthropic.com → API Keys."
+          info="Dùng cho Dán tin nhắn và Tìm logo. Key được lưu trong vault (đã mã hoá) và đồng bộ cùng vault. Lấy key ở console.anthropic.com → API Keys."
           sub={apiKey ? `${apiKey.slice(0, 10)}…${apiKey.slice(-4)}` : 'Chưa có'}
         >
           {apiKey && !editing && (

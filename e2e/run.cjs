@@ -529,7 +529,7 @@ async function localFlow(browser) {
       contentType: 'application/json',
       body: JSON.stringify({
         id: 'msg_test', type: 'message', role: 'assistant', model: claude.requests.at(-1).body.model,
-        content: r.refusal ? [] : [{ type: 'text', text: JSON.stringify({ items: r.items }) }],
+        content: r.refusal ? [] : [{ type: 'text', text: JSON.stringify({ items: typeof r.items === 'function' ? r.items(claude.requests.at(-1).body) : r.items }) }],
         stop_reason: r.refusal ? 'refusal' : 'end_turn', stop_sequence: null,
         usage: { input_tokens: 120, output_tokens: 80 },
       }),
@@ -644,8 +644,9 @@ async function localFlow(browser) {
   await page.route(/^https:\/\/([a-z]+\.)?example\.test\//, (route) => {
     const u = route.request().url();
     iconRequests.push(u);
-    // A blank pixel for the first try, a real icon for the second: the blank one must be skipped.
-    route.fulfill({ status: 200, contentType: 'image/png', body: u.endsWith('/favicon.ico') ? appIcon : onePixel });
+    // The site's own address answers with a blank pixel, which must be skipped; its favicon.ico
+    // fails (Playwright cannot route /favicon.ico); the parent domain has the real icon.
+    route.fulfill({ status: 200, contentType: 'image/png', body: u.startsWith('https://shop.') ? onePixel : appIcon });
   });
   await addLogin(page, 'Cửa hàng', { url: 'https://shop.example.test/login' });
   check('icon trang web: mặc định không tải gì từ mạng', iconRequests.length === 0 && (await avatarOf('Cửa hàng').textContent()) === 'C');
@@ -654,8 +655,9 @@ async function localFlow(browser) {
   check('logo: có xem trước trong Cài đặt', (await page.locator('.brand-preview [data-brand]').count()) === 6);
   await page.getByLabel('Tải icon cho các trang khác').selectOption('site');
   await page.getByRole('button', { name: 'Đóng' }).click();
-  await avatarOf('Cửa hàng').locator('img[src$="/favicon.ico"]').waitFor();
-  check('icon trang web: lấy từ chính trang, bỏ qua ảnh rỗng', iconRequests.some((u) => u.endsWith('/apple-touch-icon.png')) && (await avatarOf('Cửa hàng').locator('img').getAttribute('src')) === 'https://shop.example.test/favicon.ico');
+  await avatarOf('Cửa hàng').locator('img[src="https://example.test/apple-touch-icon.png"]').waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('.avatar.favicon img')].some((i) => i.complete && i.naturalWidth >= 8));
+  check('icon trang web: lấy từ chính trang, bỏ qua ảnh rỗng và ảnh lỗi', iconRequests[0] === 'https://shop.example.test/apple-touch-icon.png' && (await avatarOf('Cửa hàng').locator('img').count()) === 1);
   check('icon trang web: không ảnh hưởng mục đã có logo', (await avatarOf('GitHub').locator('img').count()) === 0);
   await shot(page, '17-logos');
   await page.getByRole('button', { name: 'Cài đặt' }).click();
@@ -668,6 +670,47 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Giao diện' }).click();
   await page.getByRole('switch', { name: 'Logo các trang nổi tiếng' }).click();
   await page.getByRole('button', { name: 'Đóng' }).click();
+
+  // ---- find logos with Claude ----
+  await addLogin(page, 'Ngân hàng của mẹ');
+  await addLogin(page, 'Ví điện tử');
+  claude.reply = {
+    items: (body) => {
+      const lines = body.messages[0].content.split('\n').filter((l) => / \| /.test(l));
+      return lines.map((l) => {
+        const [n, title] = l.split(' | ');
+        const a = { n: Number(n), brand: '', name: '', color: '', letter: '' };
+        if (title === 'Ngân hàng của mẹ') return { ...a, brand: 'acb', name: 'ACB' };
+        if (title === 'Ví điện tử') return { ...a, name: 'Viettel Money', color: 'EE0033', letter: 'VM' };
+        if (title === 'Cửa hàng') return { ...a, brand: 'notabrand', name: 'Shop ABC' };
+        return a;
+      });
+    },
+  };
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  const missingText = await page.locator('.setting', { hasText: 'Tìm logo bằng Claude' }).textContent();
+  await page.getByText('Danh sách mục chưa có logo').click();
+  const missingList = await page.getByRole('list', { name: 'Mục chưa có logo' }).textContent();
+  check('logo Claude: liệt kê mục chưa có logo', /\d+ mục chưa có logo/.test(missingText) && missingList.includes('Ngân hàng của mẹ') && missingList.includes('Cửa hàng') && !missingList.includes('GitHub'));
+  await page.locator('.setting', { hasText: 'Tìm logo bằng Claude' }).getByRole('button', { name: 'Tìm' }).click();
+  await page.getByLabel('Gán logo ACB cho Ngân hàng của mẹ').waitFor();
+  const logoReq = JSON.stringify(claude.requests.at(-1).body);
+  check('logo Claude: chỉ gửi tên mục và tên trang, không gửi tài khoản/mật khẩu', logoReq.includes('Ngân hàng của mẹ') && logoReq.includes('shop.example.test') && !logoReq.includes('p@ss-') && !logoReq.includes('user@example.com'));
+  check('logo Claude: có logo sẵn và logo màu + chữ, bỏ id không có thật', (await page.getByRole('checkbox', { name: /^Gán logo/ }).count()) === 2 && (await page.getByLabel('Gán logo Viettel Money cho Ví điện tử').count()) === 1);
+  await page.getByText(/Vẫn chưa có logo: \d+ mục/).click();
+  check('logo Claude: ghi rõ mục vẫn chưa có logo', (await page.getByRole('list', { name: 'Vẫn chưa có logo' }).textContent()).includes('Shop ABC, không rõ màu'));
+  await shot(page, '18-logo-claude');
+  await page.getByRole('button', { name: 'Lưu 2 logo' }).click();
+  await page.getByText('Đã gán logo cho 2 mục').waitFor();
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  check('logo Claude: áp dụng ngay vào danh sách', (await avatarOf('Ngân hàng của mẹ').getAttribute('data-brand')) === 'acb' && (await avatarOf('Ví điện tử').textContent()) === 'VM');
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  check('logo Claude: ghi lại số mục đã gán', (await page.locator('.setting', { hasText: 'Tìm logo bằng Claude' }).textContent()).includes('2 mục do Claude gán'));
+  await page.getByRole('button', { name: 'Gỡ các logo do Claude gán' }).click();
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  check('logo Claude: gỡ được', (await avatarOf('Ngân hàng của mẹ').getAttribute('data-brand')) === null);
 
   // Wiping for real, through the guarded path.
   await page.getByRole('button', { name: 'Khoá' }).click();

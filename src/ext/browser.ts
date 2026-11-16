@@ -1,6 +1,7 @@
 import { forcedTabId, isExtension, isPopup, memory } from '../lib/platform';
 import { parseOtp, totp } from '../lib/totp';
-import type { Item } from '../lib/vault';
+import type { Item, Vault } from '../lib/vault';
+import { LOGO_SETTING, parseOverrides } from '../lib/brandMatch';
 import { fillPage, type FillResult } from './fill';
 import { FILL_INDEX_KEY, hostMatches, hostOf, matchScore, UNLOCK_KEY, type FillEntry, type UnlockRecord } from './match';
 
@@ -108,15 +109,16 @@ export async function touch(minutes: number): Promise<void> {
 }
 
 /** Publishes the logins the background worker may offer on web pages. */
-export async function writeFillIndex(items: Item[]): Promise<void> {
+export async function writeFillIndex(vault: Vault): Promise<void> {
   if (!isExtension) return;
+  const logos = parseOverrides(vault.getSetting(LOGO_SETTING));
   const entries: FillEntry[] = [];
-  for (const i of items) {
+  for (const i of vault.items()) {
     if (i.trashed) continue;
     const urls = [i.url, ...i.fields.filter((f) => /^KP2A_URL/.test(f.name)).map((f) => f.value)];
     const hosts = [...new Set(urls.map(hostOf).filter(Boolean))];
     if (!hosts.length) continue;
-    entries.push({ id: i.id, title: i.title, username: i.username, password: i.password, otp: i.otp, hosts });
+    entries.push({ id: i.id, title: i.title, username: i.username, password: i.password, otp: i.otp, hosts, logo: logos[i.id] });
   }
   await memory.set(FILL_INDEX_KEY, entries);
 }

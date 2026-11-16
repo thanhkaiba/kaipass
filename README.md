@@ -150,6 +150,12 @@ các trường khác. Một tài khoản thì mở sẵn trình sửa để bạ
 Pixel, Emoji) và màu chủ đạo. Lựa chọn lưu theo từng thiết bị. Các bộ icon là mã nguồn mở, xem
 `THIRD-PARTY-NOTICES.md`.
 
+### Logo trang web
+
+- **Logo có sẵn** cho hơn 200 trang nổi tiếng (Google, Gmail, GitHub, Bitbucket, Linear, Apple, Shopee, Zalo, Notion…). App nhận ra trang theo địa chỉ web của mục (kể cả `shopee.vn`, `google.com.vn`; `mail.google.com` ra Gmail), hoặc theo tên mục và chữ viết tắt ("GitHub - công ty", "Visa VCB"). Không cần mạng. Logo lấy từ [Simple Icons](https://simpleicons.org) (CC0). Vài hãng (Microsoft, LinkedIn, Amazon/AWS, OpenAI, Slack…) đã yêu cầu Simple Icons gỡ logo, và các ngân hàng hay ví Việt Nam (Vietcombank, Techcombank, MoMo…) không có trong bộ đó. Những trang này hiện ô màu thương hiệu kèm chữ cái. Tắt được ở Cài đặt → Giao diện.
+- **Tải icon cho các trang khác** (mặc định tắt): lấy icon *từ chính trang web* hoặc *qua DuckDuckGo*. Bật lên thì mạng bạn đang dùng (hoặc DuckDuckGo) sẽ thấy danh sách tên trang trong vault, nên tuỳ chọn này để tắt sẵn.
+- **Tìm logo bằng Claude**: liệt kê các mục chưa có logo, rồi nhờ Claude đoán mỗi mục thuộc trang nào. Claude chỉ nhận tên mục và tên trang, không nhận tài khoản, mật khẩu hay ghi chú. Bạn duyệt rồi bấm lưu. Logo đã gán nằm trong vault, đồng bộ sang các máy khác, và gỡ được bất cứ lúc nào.
+
 ## Mở khoá nhanh và quên master password
 
 ### Vân tay / mật khẩu máy

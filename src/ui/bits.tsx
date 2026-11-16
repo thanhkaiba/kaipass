@@ -11,7 +11,7 @@ import {
 import { defaultGen, generatePassword, type GenOptions } from '../lib/generator';
 import { parseOtp, secondsLeft, totp } from '../lib/totp';
 import { EMOJI, useIconPack } from './iconPack';
-import { failedIcons, faviconUrls, inkOn, useBrand, useBrandPrefs } from './brands';
+import { failedIcons, faviconUrls, inkOn, useBrand, useBrandPrefs, type Brand } from './brands';
 
 // ---- icons ----
 
@@ -458,26 +458,29 @@ export function PasswordPrompt({
 const HUES = [214, 262, 330, 12, 34, 152, 188, 290];
 
 /** A coloured tile with the item's first letter, so lists are easy to scan. */
-export function Avatar({ title, icon, url = '', size = 36 }: { title: string; icon: string; url?: string; size?: number }) {
-  const brand = useBrand(title, url);
+/** A site's logo on its brand colour, or its letter when there is no logo. */
+export function BrandTile({ brand, size = 36 }: { brand: Brand; size?: number }) {
+  return (
+    <span className="avatar brand" style={{ width: size, height: size, background: `#${brand.hex}`, color: inkOn(brand.hex) }} data-brand={brand.id} aria-hidden="true">
+      {brand.path ? (
+        <svg viewBox="0 0 24 24" width={Math.round(size * 0.56)} height={Math.round(size * 0.56)} fill="currentColor">
+          <path d={brand.path} />
+        </svg>
+      ) : (
+        <span className="brand-letter" style={{ fontSize: Math.round(size * ((brand.letter?.length ?? 1) > 2 ? 0.3 : (brand.letter?.length ?? 1) > 1 ? 0.38 : 0.48)) }}>
+          {brand.letter}
+        </span>
+      )}
+    </span>
+  );
+}
+
+export function Avatar({ title, icon, url = '', id, size = 36 }: { title: string; icon: string; url?: string; id?: string; size?: number }) {
+  const brand = useBrand(title, url, id);
   const { favicons } = useBrandPrefs();
   const [, bump] = useState(0);
   const style = { width: size, height: size };
-  if (brand) {
-    return (
-      <span className="avatar brand" style={{ ...style, background: `#${brand.hex}`, color: inkOn(brand.hex) }} data-brand={brand.id} aria-hidden="true">
-        {brand.path ? (
-          <svg viewBox="0 0 24 24" width={Math.round(size * 0.56)} height={Math.round(size * 0.56)} fill="currentColor">
-            <path d={brand.path} />
-          </svg>
-        ) : (
-          <span className="brand-letter" style={{ fontSize: Math.round(size * (brand.letter!.length > 2 ? 0.3 : brand.letter!.length > 1 ? 0.38 : 0.48)) }}>
-            {brand.letter}
-          </span>
-        )}
-      </span>
-    );
-  }
+  if (brand) return <BrandTile brand={brand} size={size} />;
   const src = faviconUrls(url, favicons).find((u) => !failedIcons.has(u));
   if (src) {
     const fail = () => {

@@ -2515,3 +2515,58 @@ kbd {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* Find logos with Claude: the list of items without a logo, then Claude's matches */
+.logo-log details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.logo-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.logo-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 13px;
+}
+
+.logo-list li .grow {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logo-list li .muted {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.logo-list input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}
+
+.row-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}

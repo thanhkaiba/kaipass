@@ -43,8 +43,13 @@ function brandId(data: BrandData, title: string, url: string): string | undefine
   // address or one on a company domain (github.mycompany.com).
   const whole = norm(title);
   if (data.titles[whole]) return data.titles[whole];
-  const first = norm(title.trim().split(/[\s\-–—|:(/·,]+/)[0] ?? '');
-  return first ? data.titles[first] : undefined;
+  // Then each word: the first may be short ("GG", "FB"); later ones need three letters or more, so
+  // "Visa VCB" and "Tài khoản Google công ty" match but a stray "MB" in a note does not.
+  const words = title.trim().split(/[\s\-–—|:(/)·,.]+/).map(norm).filter(Boolean);
+  for (const [i, w] of words.entries()) {
+    if ((i === 0 || w.length >= 3) && data.titles[w]) return data.titles[w];
+  }
+  return undefined;
 }
 
 export function brandFor(data: BrandData, title: string, url: string): Brand | null {
@@ -70,3 +75,33 @@ export function faviconUrls(url: string, source: FaviconSource): string[] {
   return list;
 }
 
+
+/**
+ * A logo the user accepted for one item (from "Find logos with Claude"): a bundled logo by id, or
+ * a brand name, colour and letter for a site the bundle does not know. Kept in the vault, so it
+ * syncs with it.
+ */
+export type LogoOverride = { b?: string; t?: string; h?: string; l?: string };
+
+/** Vault setting holding { itemId: LogoOverride } as JSON. */
+export const LOGO_SETTING = 'logoOverrides';
+
+export function parseOverrides(json: string): Record<string, LogoOverride> {
+  try {
+    const v: unknown = json ? JSON.parse(json) : {};
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, LogoOverride>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export const HEX = /^[0-9a-f]{6}$/i;
+
+export function resolveOverride(data: BrandData, o: LogoOverride | undefined): Brand | null {
+  if (!o) return null;
+  const b = o.b ? data.brands[o.b] : undefined;
+  if (b) return { id: o.b!, title: b[0], hex: b[1], path: b[2], letter: b[3] };
+  const letter = o.l?.trim().slice(0, 3);
+  if (o.h && HEX.test(o.h) && letter) return { id: 'custom', title: o.t ?? '', hex: o.h.toUpperCase(), path: '', letter };
+  return null;
+}

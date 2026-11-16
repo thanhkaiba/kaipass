@@ -57,7 +57,7 @@ export default function App() {
   useEffect(() => {
     if (phase.k !== 'open' || !isExtension) return;
     const { session } = phase;
-    const publish = () => void writeFillIndex(session.vault.items());
+    const publish = () => void writeFillIndex(session.vault);
     publish();
     const unsubscribe = session.subscribe(publish);
     // The background worker saved a login or synced: fold its changes into the open vault.
