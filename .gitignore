@@ -4,3 +4,4 @@ dist-ext
 *.kdbx
 *.1pux
 .env*
+dist-android

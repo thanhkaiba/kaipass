@@ -6,23 +6,31 @@ import { VitePWA } from 'vite-plugin-pwa';
 const stub = fileURLToPath(new URL('./src/lib/empty.ts', import.meta.url));
 
 // The page may only talk to Google's sign-in and Drive endpoints, and may only run its own code.
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com/gsi/client",
-  "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
-  "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://www.googleapis.com https://accounts.google.com https://api.anthropic.com",
-  "frame-src https://accounts.google.com blob:",
-  "worker-src 'self'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join('; ');
+// The Android app signs in through Google Play services, so it needs none of Google's web scripts.
+const csp = (android: boolean) =>
+  [
+    "default-src 'self'",
+    android ? "script-src 'self' 'wasm-unsafe-eval'" : "script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com/gsi/client",
+    android ? "style-src 'self' 'unsafe-inline'" : "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
+    "img-src 'self' data: blob: https:",
+    android
+      ? "connect-src 'self' https://www.googleapis.com https://api.anthropic.com"
+      : "connect-src 'self' https://www.googleapis.com https://accounts.google.com https://api.anthropic.com",
+    android ? 'frame-src blob:' : 'frame-src https://accounts.google.com blob:',
+    "worker-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ');
 
 export default defineConfig(({ command, mode }) => ({
   base: './',
+  // `vite build --mode android`: the copy the Android app serves from its own files.
+  build: mode === 'android' ? { outDir: 'dist-android', emptyOutDir: true } : undefined,
   plugins: [
     react(),
+    // The Android app ships its files inside the APK, so it needs no offline cache.
+    mode !== 'android' &&
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'script',
@@ -51,7 +59,7 @@ export default defineConfig(({ command, mode }) => ({
       transformIndexHtml: (html: string) =>
         html.replace(
           '<!--CSP-->',
-          command === 'build' ? `<meta http-equiv="Content-Security-Policy" content="${CSP}" />` : '',
+          command === 'build' ? `<meta http-equiv="Content-Security-Policy" content="${csp(mode === 'android')}" />` : '',
         ),
     },
   ],

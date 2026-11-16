@@ -6,6 +6,8 @@
  * a key that encrypts the master password. Only that encrypted copy is stored, on this device.
  * Without passing the device's check, the stored copy cannot be read.
  */
+import { androidInfo, native, NativeError } from './android';
+import { isAndroid } from './platform';
 import { kv } from './store';
 
 const KEY = 'bio';
@@ -25,6 +27,7 @@ export class BioUnavailable extends Error {}
 
 export async function bioSupported(): Promise<boolean> {
   try {
+    if (isAndroid) return (await androidInfo()).bio.available;
     return (
       typeof PublicKeyCredential !== 'undefined' &&
       (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
@@ -35,6 +38,7 @@ export async function bioSupported(): Promise<boolean> {
 }
 
 export async function bioEnrolled(): Promise<boolean> {
+  if (isAndroid) return (await androidInfo().catch(() => null))?.bio.enrolled ?? false;
   return !!(await kv.get<BioRecord>(KEY));
 }
 
@@ -72,6 +76,11 @@ async function prfFor(credentialId: Uint8Array, salt: Uint8Array): Promise<Array
 
 /** Sets up unlocking on this device. Shows the device's fingerprint / PIN prompt. */
 export async function enrollBio(masterPassword: string): Promise<void> {
+  // On Android the phone's keystore holds the key, unlocked by fingerprint, face or PIN.
+  if (isAndroid) {
+    await native('bioEnroll', { password: masterPassword });
+    return;
+  }
   const salt = crypto.getRandomValues(new Uint8Array(32));
   let cred: PublicKeyCredential | null;
   try {
@@ -111,6 +120,16 @@ export async function enrollBio(masterPassword: string): Promise<void> {
 
 /** Shows the device's prompt and returns the master password stored for this device. */
 export async function bioPassword(): Promise<string> {
+  if (isAndroid) {
+    try {
+      return (await native<{ password: string }>('bioUnlock')).password;
+    } catch (e) {
+      if (e instanceof NativeError && e.message === 'invalidated') {
+        throw new BioUnavailable('Vân tay trên máy đã thay đổi. Hãy nhập master password rồi bật lại mở khoá bằng vân tay.');
+      }
+      throw e;
+    }
+  }
   const r = await kv.get<BioRecord>(KEY);
   if (!r) throw new BioUnavailable('Chưa bật mở khoá bằng vân tay trên thiết bị này');
   const prf = await prfFor(unb64(r.credentialId), unb64(r.salt));
@@ -123,5 +142,6 @@ export async function bioPassword(): Promise<string> {
 }
 
 export async function disableBio(): Promise<void> {
+  if (isAndroid) await native('bioDisable');
   await kv.del(KEY);
 }

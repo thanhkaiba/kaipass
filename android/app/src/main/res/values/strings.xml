@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KaiPass</string>
+    <string name="unlock_to_fill">Mở khoá KaiPass</string>
+    <string name="search_vault">Tìm trong KaiPass…</string>
+    <string name="pick_title">Chọn tài khoản</string>
+    <string name="pick_search">Tìm theo tên, tài khoản</string>
+    <string name="pick_remember">Nhớ cho %1$s</string>
+    <string name="pick_empty">Không có tài khoản nào</string>
+    <string name="otp_copied">KaiPass: đã chép mã OTP</string>
+    <string name="locked_again">KaiPass đã khoá. Chạm vào ô lần nữa để mở khoá.</string>
+    <string name="bio_title">Mở khoá KaiPass</string>
+    <string name="bio_enroll_title">Bật mở khoá bằng vân tay</string>
+    <string name="bio_cancel">Huỷ</string>
+    <string name="save_later">Mở KaiPass để lưu đăng nhập này</string>
+</resources>

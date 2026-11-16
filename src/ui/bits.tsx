@@ -11,6 +11,8 @@ import {
 import { defaultGen, generatePassword, type GenOptions } from '../lib/generator';
 import { parseOtp, secondsLeft, totp } from '../lib/totp';
 import { EMOJI, useIconPack } from './iconPack';
+import { native, saveFileAndroid } from '../lib/android';
+import { isAndroid } from '../lib/platform';
 import { failedIcons, faviconUrls, inkOn, useBrand, useBrandPrefs, type Brand } from './brands';
 
 // ---- icons ----
@@ -251,6 +253,11 @@ export const useToast = () => useContext(ToastCtx);
 let clearTimer: ReturnType<typeof setTimeout> | undefined;
 
 export async function copyText(text: string, secret: boolean): Promise<void> {
+  // Android marks secrets as sensitive (hidden from the clipboard preview) and clears them itself.
+  if (isAndroid) {
+    await native('copy', { text, sensitive: secret });
+    return;
+  }
   await navigator.clipboard.writeText(text);
   clearTimeout(clearTimer);
   if (secret) {
@@ -626,6 +633,11 @@ export function Generator({ onUse }: { onUse: (password: string) => void }) {
 // ---- misc ----
 
 export function downloadBytes(name: string, bytes: BlobPart, mime = 'application/octet-stream'): void {
+  // A web view cannot download: the Android app asks where to save instead.
+  if (isAndroid) {
+    void saveFileAndroid(name, bytes, mime).catch(() => {});
+    return;
+  }
   const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
   const a = document.createElement('a');
   a.href = url;

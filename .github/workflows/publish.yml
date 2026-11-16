@@ -39,6 +39,33 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_API_KEY: ${{ vars.GOOGLE_API_KEY }}
 
+      - name: Build Android web files
+        run: npm run build:android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Test the Android app
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      # The APK must always be signed with the same key: Android only installs updates signed with
+      # the key of the installed app, and Google sign-in is tied to that key's SHA-1. Without the
+      # secrets (Settings → Secrets and variables → Actions) no APK is published.
+      - name: Build signed APK
+        id: apk
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        working-directory: android
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/kaipass-release.jks"
+          KAIPASS_KEYSTORE="$RUNNER_TEMP/kaipass-release.jks" ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../kaipass.apk
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KAIPASS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+
       # The site goes to the gh-pages branch and the extension to a release, so nothing here
       # uses Actions artifact storage.
       - name: Publish web app to the gh-pages branch
@@ -54,13 +81,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Publish extension to the "builds" release
+      - name: Publish extension and APK to the "builds" release
         run: |
           (cd dist-ext && zip -qr ../kaipass-extension.zip .)
           gh release delete builds --cleanup-tag --yes || true
-          gh release create builds kaipass-extension.zip \
+          files=(kaipass-extension.zip)
+          [ -f kaipass.apk ] && files+=(kaipass.apk)
+          gh release create builds "${files[@]}" \
             --target "${GITHUB_SHA}" \
             --title "Bản build mới nhất" \
-            --notes "Tự động tạo từ nhánh main. kaipass-extension.zip là extension cho Chrome/Edge: giải nén rồi nạp ở chrome://extensions (Load unpacked)."
+            --notes "Tự động tạo từ nhánh main. kaipass-extension.zip là extension cho Chrome/Edge: giải nén rồi nạp ở chrome://extensions (Load unpacked). kaipass.apk là app Android (nếu repo đã có khoá ký)."
         env:
           GH_TOKEN: ${{ github.token }}

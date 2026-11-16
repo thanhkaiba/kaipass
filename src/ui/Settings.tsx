@@ -4,7 +4,7 @@ import { defaultInlinePrefs, INLINE_PREFS_KEY, type InlinePrefs } from '../ext/m
 import { bioEnrolled, bioSupported, disableBio, enrollBio } from '../lib/bio';
 import { Drive, preloadGoogle } from '../lib/drive';
 import { importOnePux, type ImportResult } from '../lib/onepux';
-import { isExtension, isPopup } from '../lib/platform';
+import { isAndroid, isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes, setAutoLockMinutes } from '../lib/prefs';
 import { recoveryEnabled, removeRecovery, resealRecovery, setUpRecovery } from '../lib/recovery';
 const kitLib = () => import('../lib/recoveryKit');
@@ -24,9 +24,10 @@ import {
 } from './bits';
 import { WipeSection } from './Forgot';
 import { LookSettings } from './Look';
+import { AndroidAutofillSettings } from './AndroidSettings';
 import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
-export type Tab = 'security' | 'data' | 'web' | 'ai' | 'look' | 'device';
+export type Tab = 'security' | 'data' | 'web' | 'autofill' | 'ai' | 'look' | 'device';
 
 export function Setting({
   icon,
@@ -208,6 +209,8 @@ export function Settings({
     downloadBytes(kit.kitFileName(), await kit.buildKit(key), 'text/html');
   };
   const printKit = async (key: string) => {
+    // No print preview in the Android app: save the kit, then print it from the Files app.
+    if (isAndroid) return saveKit(key);
     const url = URL.createObjectURL(new Blob([await (await kitLib()).buildKit(key)], { type: 'text/html' }));
     window.open(url, '_blank', 'noopener');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -237,6 +240,7 @@ export function Settings({
     ['security', 'shield', 'Bảo mật'],
     ['data', 'folder', 'Dữ liệu'],
     ...(isExtension ? ([['web', 'puzzle', 'Gợi ý trên web']] as [Tab, string, string][]) : []),
+    ...(isAndroid ? ([['autofill', 'key', 'Tự điền']] as [Tab, string, string][]) : []),
     ['ai', 'sparkle', 'Claude AI'],
     ['look', 'image', 'Giao diện'],
     ['device', 'device', 'Thiết bị'],
@@ -522,6 +526,8 @@ export function Settings({
                   </div>
                 </>
               )}
+
+              {tab === 'autofill' && <AndroidAutofillSettings />}
 
               {tab === 'web' && (
                 <div className="group">

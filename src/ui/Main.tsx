@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { currentTab, fillTab, matchesPage, openInTab, pageScore, touch, type PageTab } from '../ext/browser';
-import { isExtension, isPopup } from '../lib/platform';
+import { native } from '../lib/android';
+import { isAndroid, isExtension, isPopup } from '../lib/platform';
+import { AndroidSave } from './AndroidSave';
 import { autoLockMinutes } from '../lib/prefs';
 import type { Session, SyncStatus } from '../lib/session';
 import type { Item, ItemDraft, ItemType } from '../lib/vault';
@@ -136,9 +138,10 @@ export function Main({
       clearTimeout(timer);
       timer = setTimeout(() => onLock(session), minutes * 60_000);
       // The extension popup does not live long enough to run that timer, so it also keeps a deadline.
-      if (isExtension && Date.now() - touched > 10_000) {
+      if ((isExtension || isAndroid) && Date.now() - touched > 10_000) {
         touched = Date.now();
-        void touch(minutes);
+        if (isAndroid) void native('touch').catch(() => {});
+        else void touch(minutes);
       }
     };
     reset();
@@ -342,7 +345,15 @@ export function Main({
             <span className="dot" />
             <span>{SYNC_LABEL[session.status]}</span>
           </button>
-          <IconButton icon="settings" label="Cài đặt" onClick={() => setSettings('security')} />
+          <IconButton
+            icon="settings"
+            label="Cài đặt"
+            onClick={() => {
+              setSettings('security');
+              // On a phone, closing Settings should land on the list, not the side menu.
+              setPane('list');
+            }}
+          />
           <IconButton icon="lock" label="Khoá" onClick={() => onLock(session)} />
         </div>
       </nav>
@@ -588,6 +599,8 @@ export function Main({
           }}
         />
       )}
+
+      {isAndroid && <AndroidSave session={session} />}
 
       {settings && (
         <Settings session={session} initialTab={settings} onClose={() => setSettings(false)} onReplace={onReplace} />

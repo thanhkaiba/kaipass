@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { bioEnrolled, BioUnavailable, bioPassword, disableBio } from '../lib/bio';
-import { forcedTabId, isPopup } from '../lib/platform';
+import { forcedTabId, isAndroid, isPopup } from '../lib/platform';
 import { Session, type Meta } from '../lib/session';
 import { WrongPasswordError } from '../lib/vault';
 import { Brand, errorText, Icon, SecretInput } from './bits';
 import { ForgotDialog } from './Forgot';
 
 const BIO_WINDOW = new URLSearchParams(location.search).has('bio');
+/** Set when Android's autofill opened KaiPass to fill a login: the app or site it is for. */
+const AUTOFILL_FOR = isAndroid ? new URLSearchParams(location.search).get('autofill') : null;
 
 export function Lock({
   meta,
@@ -62,7 +64,8 @@ export function Lock({
         await disableBio();
         setBio(false);
       }
-      setError(errorText(err));
+      // Closing the phone's fingerprint prompt is a choice, not an error: just show the password box.
+      if (!(isAndroid && err instanceof Error && err.message === 'Đã huỷ')) setError(errorText(err));
       setBusy(false);
       return;
     }
@@ -80,7 +83,8 @@ export function Lock({
   useEffect(() => {
     void bioEnrolled().then((on) => {
       setBio(on);
-      if (on && BIO_WINDOW) void useBio();
+      // The extension's own window and the Android app ask for the fingerprint straight away.
+      if (on && (BIO_WINDOW || isAndroid)) void useBio();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -103,6 +107,14 @@ export function Lock({
             {meta.mode === 'drive' ? 'Google Drive' : 'Thiết bị này'}
           </span>
         </div>
+        {AUTOFILL_FOR && (
+          <p className="autofill-for" role="status">
+            <Icon name="key" />
+            <span>
+              Mở khoá để tự điền cho <strong>{AUTOFILL_FOR}</strong>
+            </span>
+          </p>
+        )}
         {bio && (
           <>
             <button type="button" className="primary bio-btn" onClick={() => void useBio()} disabled={busy}>

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { forget, recall, remember, writeFillIndex } from './ext/browser';
 import { BUMP_KEY } from './ext/match';
 import { preloadGoogle } from './lib/drive';
-import { isExtension, isPopup } from './lib/platform';
+import { native } from './lib/android';
+import { androidEntries } from './lib/androidIndex';
+import { isAndroid, isExtension, isPopup } from './lib/platform';
 import { autoLockMinutes } from './lib/prefs';
 import { Session, storedMeta, type Meta } from './lib/session';
 import { parseLink } from './lib/share';
@@ -68,6 +70,20 @@ export default function App() {
     return () => {
       unsubscribe();
       chrome.storage.onChanged.removeListener(onChange);
+    };
+  }, [phase]);
+
+  // Android: the autofill service offers the open vault's logins, and forgets them on lock.
+  useEffect(() => {
+    if (phase.k !== 'open' || !isAndroid) return;
+    const { session } = phase;
+    const publish = () =>
+      void native('setFillIndex', { entries: androidEntries(session.vault), lockMinutes: autoLockMinutes() }).catch(() => {});
+    publish();
+    const unsubscribe = session.subscribe(publish);
+    return () => {
+      unsubscribe();
+      void native('clearFillIndex').catch(() => {});
     };
   }, [phase]);
 

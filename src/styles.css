@@ -2570,3 +2570,34 @@ kbd {
   flex-wrap: wrap;
   margin-top: 10px;
 }
+
+/* Android: the lock screen autofill opened */
+.autofill-for {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft, var(--surface-2));
+  font-size: 14px;
+}
+
+.autofill-for strong {
+  word-break: break-all;
+}
+
+.save-where {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.help-list {
+  margin: 12px 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}

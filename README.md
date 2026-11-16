@@ -12,7 +12,8 @@ bạn. Không có server, không có phí hằng tháng.
   Đọc được cả mã "Export accounts" của Google Authenticator (thêm mọi tài khoản cùng lúc).
 - Nhập dữ liệu từ 1Password (file `.1pux`), gồm cả OTP, trường tuỳ chỉnh và file đính kèm.
 - Đồng bộ qua Google Drive, tự gộp khi hai thiết bị cùng sửa. Mất mạng vẫn xem và sửa được.
-- Cài như app trên Mac, Windows, iPhone, Android (PWA).
+- Cài như app trên Mac, Windows, iPhone (PWA). Trên Android có app riêng (APK) tự điền mật khẩu
+  và OTP vào mọi app và trình duyệt.
 - Tạo mật khẩu, tìm kiếm, thư mục, nhãn, yêu thích, thùng rác, tự khoá.
 - File `.kdbx` mở được bằng KeePassXC, KeePassium, KeePassDX… nên bạn không bị khoá vào app này.
 
@@ -20,8 +21,8 @@ bạn. Không có server, không có phí hằng tháng.
 
 - **Tự điền trên máy tính cần cài extension** (xem bên dưới). Web app không tự điền được vào trang
   khác.
-- **Trên điện thoại chưa có tự điền.** Tạm thời, mở cùng file `kaipass.kdbx` trên Google Drive bằng
-  KeePassium (iOS) hoặc KeePassDX / Keepass2Android (Android).
+- **iPhone chưa có tự điền.** Tạm thời, mở cùng file `kaipass.kdbx` trên Google Drive bằng
+  KeePassium. Android thì dùng app KaiPass (xem phần Android).
 - **Quên master password mà chưa tạo khoá khôi phục là mất dữ liệu.** Xem phần khoá khôi phục.
 - Phiên đăng nhập Google hết hạn sau khoảng một giờ. Khi đó app vẫn dùng được, chỉ cần bấm
   "Đăng nhập Google để đồng bộ" một lần.
@@ -128,6 +129,52 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
 - Việc lưu từ trang web và đồng bộ nền chạy trong phần chạy ngầm của extension, dùng bản vault trên
   máy bạn và master password đang giữ trong bộ nhớ tạm. Cửa sổ KaiPass đang mở sẽ tự thấy thay đổi.
 - Extension và web app là hai bản cài riêng, cùng đồng bộ với một file trên Drive.
+
+## App Android (tự điền mật khẩu và OTP)
+
+App Android là KaiPass đóng gói sẵn, cộng thêm phần chạy riêng trên điện thoại: dịch vụ tự điền
+của Android, mở khoá bằng vân tay/khuôn mặt/mã PIN, và đăng nhập Google qua Google Play.
+
+### Cài
+
+1. Một lần trong Google Cloud Console (cùng project với Client ID web): **APIs & Services →
+   Credentials → Create credentials → OAuth client ID → Android**, rồi điền:
+   - Package name: `io.github.thanhkaiba.kaipass`
+   - SHA-1: `DC:A5:E3:99:95:80:99:14:63:3A:AC:89:71:F8:B4:53:BC:2A:D9:37`
+
+   Google nhận ra app qua cặp này, nên không cần dán Client ID vào app. Nếu app còn ở chế độ
+   Testing, tài khoản Google của bạn phải nằm trong danh sách Test users như với bản web.
+2. Tải `kaipass.apk` (release "builds" trên GitHub, hoặc file được gửi kèm), mở trên điện thoại,
+   cho phép "Cài app không rõ nguồn gốc" khi Android hỏi.
+3. Mở KaiPass → **Lưu trên Google Drive** → **Đăng nhập Google** → nhập master password. Vault
+   có sẵn trên Drive sẽ được tải về.
+4. **Cài đặt → Tự điền → Bật** rồi chọn KaiPass. Với Chrome: Cài đặt → Dịch vụ tự động điền →
+   *Tự động điền bằng dịch vụ khác*. Firefox, Brave, Edge, Cốc Cốc và Samsung Internet dùng được ngay.
+5. **Cài đặt → Bảo mật → Vân tay / mật khẩu máy** để mở khoá không cần gõ master password.
+
+### Dùng
+
+- Chạm vào ô đăng nhập trong app hoặc trang web: tài khoản khớp hiện ngay trên bàn phím (Android 11+)
+  hoặc trong danh sách thả xuống. Chạm là điền tên đăng nhập và mật khẩu.
+- Ô mã OTP được điền mã mới nhất. Nếu trang hỏi OTP ở bước sau, mã đã được chép sẵn để dán.
+- Khi vault đang khoá: chạm **Mở khoá KaiPass**, mở bằng vân tay, các tài khoản khớp hiện ra.
+- Không có tài khoản khớp (ví dụ app ngân hàng có tên khác website): chọn **Tìm trong KaiPass…**,
+  chọn tài khoản. KaiPass nhớ lựa chọn đó cho app này.
+- Đăng nhập bằng tài khoản mới hoặc đổi mật khẩu: Android hỏi "Lưu vào KaiPass?". KaiPass mở lên,
+  hỏi lưu mới hay cập nhật mục cũ, xong thì quay về app đang dùng.
+- Mở link chia sẻ KaiPass: trong Zalo/Messenger bấm Chia sẻ → KaiPass.
+
+### Cần biết
+
+- Danh sách tài khoản cho tự điền chỉ nằm trong bộ nhớ của app khi vault đang mở. Nó bị xoá khi
+  vault khoá, hoặc sau thời gian tự khoá kể cả khi app chạy nền.
+- KaiPass chặn chụp màn hình và ảnh xem trước trong danh sách app gần đây.
+- Mở khoá bằng vân tay: master password được mã hoá bằng khoá trong chip bảo mật của điện thoại, chỉ
+  dùng được ngay sau khi bạn qua bước vân tay/PIN. Thêm vân tay mới thì phải bật lại.
+- Bản cập nhật phải được ký bằng cùng một khoá (file `kaipass-release.jks`). Mất khoá thì phải gỡ
+  app rồi cài lại, và tạo lại OAuth client Android với SHA-1 mới. Để GitHub Actions tự build APK,
+  thêm hai secret ở Settings → Secrets and variables → Actions:
+  `ANDROID_KEYSTORE_B64` (nội dung `base64 -w0 kaipass-release.jks`) và `ANDROID_KEYSTORE_PASSWORD`.
 
 ## Dán tin nhắn (Claude AI)
 
@@ -260,6 +307,9 @@ npm run build      # web app → dist/
 npm run build:ext  # extension → dist-ext/
 VITE_GOOGLE_API_KEY=test-key npm run build && npm run e2e   # web app trên Chromium (cần Playwright)
 KAIPASS_TEST_HOSTS=1 npm run build:ext && npm run e2e:ext   # extension trên Chromium
+npm run build:android && npm run e2e:android                # giao diện bản Android, phần native giả lập
+cd android && ./gradlew testDebugUnitTest                   # phần Kotlin: OTP, nhận diện ô, khớp trang/app
+npm run apk        # APK (cần Android SDK; ký bằng KAIPASS_KEYSTORE + KAIPASS_KEYSTORE_PASSWORD)
 ```
 
 Hai bộ `e2e` thay Google bằng bản giả lập, nên chúng kiểm tra logic đồng bộ và tự điền của app chứ
@@ -279,6 +329,9 @@ Mã nguồn chính:
 - `src/lib/qr.ts`: đọc mã QR (OTP, Google Authenticator)
 - `src/lib/ai.ts`: tách tin nhắn bằng Claude
 - `src/icons/`: các bộ icon, tạo bằng `node scripts/gen-icons.cjs`
+- `android/`: app Android (Kotlin): `WebHostActivity.kt` (mở web app, cầu nối native),
+  `KaiPassAutofillService.kt` + `Classifier.kt` + `Matcher.kt` (tự điền), `Bio.kt` (vân tay),
+  `GoogleAuth.kt` (Drive); phía web là `src/lib/android.ts` và `src/lib/androidIndex.ts`
 - `src/ext/`: phần riêng của extension: `background.ts` (service worker), `content.ts` (gợi ý trên
   trang), `fill.ts` (điền vào form)
 - `src/ui/`: giao diện

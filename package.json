@@ -10,7 +10,10 @@
     "test": "vitest run",
     "e2e": "node e2e/run.cjs",
     "build:ext": "tsc --noEmit && node scripts/build-ext.mjs",
-    "e2e:ext": "node e2e/ext.cjs"
+    "e2e:ext": "node e2e/ext.cjs",
+    "build:android": "tsc --noEmit && vite build --mode android",
+    "apk": "npm run build:android && cd android && ./gradlew assembleRelease",
+    "e2e:android": "node e2e/android.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

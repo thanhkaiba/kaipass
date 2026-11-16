@@ -3,7 +3,8 @@
  * user's Drive except files it created itself, and Drive only ever receives the encrypted vault.
  */
 
-import { isExtension, memory } from './platform';
+import { native } from './android';
+import { isAndroid, isExtension, memory } from './platform';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const google: any;
@@ -40,6 +41,8 @@ let gis: Promise<void> | undefined;
 
 /** Loads Google's sign-in script. Call early so a later click can open the popup immediately. */
 export function preloadGoogle(): Promise<void> {
+  // The Android app signs in through Google Play services instead.
+  if (isAndroid) return Promise.resolve();
   gis ??= new Promise<void>((resolve, reject) => {
     const s = document.createElement('script');
     s.src = GIS_URL;
@@ -78,6 +81,7 @@ export class Drive {
   /** Opens Google's consent window. On the web this must be called from a click handler. */
   async signIn(): Promise<void> {
     if (isExtension) return this.extensionSignIn(true);
+    if (isAndroid) return this.androidSignIn(true);
     await preloadGoogle();
     const r = await new Promise<any>((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
@@ -112,13 +116,20 @@ export class Drive {
    * returns false when the user has to sign in by hand.
    */
   async silent(): Promise<boolean> {
-    if (!isExtension) return false;
+    if (!isExtension && !isAndroid) return false;
     try {
-      await this.extensionSignIn(false);
+      if (isAndroid) await this.androidSignIn(false);
+      else await this.extensionSignIn(false);
       return true;
     } catch {
       return false;
     }
+  }
+
+  /** Google Play services on the phone: picks the account and asks for Drive access once. */
+  private async androidSignIn(interactive: boolean): Promise<void> {
+    const r = await native<{ token: string; expiresIn: number }>('googleToken', { interactive });
+    await this.keep(r.token, r.expiresIn);
   }
 
   /** The address Google must be told to redirect to; shown to the user during setup. */
