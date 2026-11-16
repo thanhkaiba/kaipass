@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { openInTab, remember } from '../ext/browser';
+import { defaultInlinePrefs, INLINE_PREFS_KEY, type InlinePrefs } from '../ext/match';
 import { Drive, preloadGoogle } from '../lib/drive';
 import { importOnePux, type ImportResult } from '../lib/onepux';
 import { isExtension, isPopup } from '../lib/platform';
@@ -27,6 +28,18 @@ export function Settings({
   const [newPw, setNewPw] = useState('');
   const [confirm, setConfirm] = useState('');
   const [lockMin, setLockMin] = useState(autoLockMinutes);
+  const [inline, setInline] = useState<InlinePrefs>(defaultInlinePrefs);
+
+  useEffect(() => {
+    if (!isExtension) return;
+    void chrome.storage.local.get(INLINE_PREFS_KEY).then((r) => setInline({ ...defaultInlinePrefs, ...(r[INLINE_PREFS_KEY] as Partial<InlinePrefs> | undefined) }));
+  }, []);
+
+  const setInlinePref = (patch: Partial<InlinePrefs>) => {
+    const next = { ...inline, ...patch };
+    setInline(next);
+    void chrome.storage.local.set({ [INLINE_PREFS_KEY]: next });
+  };
 
   useEffect(() => {
     if (meta.mode === 'local' && !isExtension) preloadGoogle().catch(() => {});
@@ -205,6 +218,20 @@ export function Settings({
           {busy === 'password' ? 'Đang đổi…' : 'Đổi master password'}
         </button>
       </section>
+
+      {isExtension && (
+        <section>
+          <h3>Gợi ý trên trang web</h3>
+          <label className="check">
+            <input type="checkbox" checked={inline.icon} onChange={(e) => setInlinePref({ icon: e.target.checked })} />
+            Hiện biểu tượng KaiPass và danh sách tài khoản trong ô đăng nhập
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={inline.toast} onChange={(e) => setInlinePref({ toast: e.target.checked })} />
+            Hiện thẻ gợi ý ở góc trên khi trang có ô đăng nhập
+          </label>
+        </section>
+      )}
 
       <section>
         <h3>Tự khoá</h3>

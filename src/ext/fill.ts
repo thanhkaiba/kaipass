@@ -5,6 +5,8 @@ export interface FillRequest {
   password: string;
   /** Current one-time code, or '' */
   otp: string;
+  /** Only fill the form that holds the focused field (used by the in-page suggestion list). */
+  scopeToFocused?: boolean;
 }
 
 export interface FillResult {
@@ -58,7 +60,10 @@ export function fillPage(req: FillRequest): FillResult {
     el.autocomplete === 'one-time-code' ||
     ((textLike(el) || kind(el) === 'password') && otpWords.test(hint(el)) && !userWords.test(hint(el)));
 
-  const inputs = Array.from(document.querySelectorAll('input')).filter(usable);
+  const focused = document.activeElement;
+  const scope =
+    req.scopeToFocused && focused instanceof HTMLInputElement && focused.form ? focused.form : document;
+  const inputs = Array.from(scope.querySelectorAll('input')).filter(usable);
 
   // Password: the first field that is not a "choose a new password" box or a code box.
   const passwordField = inputs.find(

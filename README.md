@@ -87,19 +87,32 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
 
 ### Dùng
 
-- Ở trang đăng nhập, bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`).
-  Các đăng nhập đã lưu cho trang đó hiện ở đầu danh sách; bấm **Điền**.
-- Extension điền tên đăng nhập, mật khẩu, và mã OTP nếu trang đang có ô nhập mã. Nếu ô nhập mã nằm
-  ở bước sau, mã OTP được copy sẵn để dán, hoặc mở lại KaiPass ở bước đó và bấm **Điền** lần nữa.
-- Một mục chỉ được gợi ý khi ô "Địa chỉ web" của nó trùng tên miền với trang đang mở.
+- **Trong ô đăng nhập:** bấm vào ô tên đăng nhập, mật khẩu hoặc mã OTP. Biểu tượng KaiPass hiện ở
+  mép phải ô, kèm danh sách tài khoản đã lưu cho trang đó; chọn một tài khoản là điền. Bấm biểu
+  tượng (hoặc phím mũi tên xuống) để mở lại danh sách.
+- **Thẻ gợi ý ở góc trên:** khi trang có ô đăng nhập và bạn đã lưu tài khoản cho trang đó, một thẻ
+  "Đăng nhập bằng KaiPass" hiện ở góc trên bên phải; bấm vào tài khoản để điền.
+- **Từ thanh công cụ:** bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`),
+  bấm **Điền** ở tài khoản muốn dùng.
+- Mã OTP được điền khi trang có ô nhập mã. Nếu ô đó ở bước sau, bấm vào ô và chọn tài khoản lần nữa.
+- Một tài khoản chỉ được gợi ý khi ô "Địa chỉ web" của nó trùng tên miền với trang đang mở.
+- Khi KaiPass đang khoá, danh sách trong ô có nút **Mở khoá**.
+- Tắt biểu tượng hoặc thẻ gợi ý trong **Cài đặt → Gợi ý trên trang web**.
 
 ### Cần biết
 
-- Extension chỉ đọc trang khi bạn bấm vào nó (quyền `activeTab`), không chạy ngầm trên mọi trang.
-  Vì vậy chưa có ô gợi ý hiện ngay trong trường nhập, và chưa tự hỏi lưu mật khẩu mới.
-- Extension không điền vào khung (iframe) thuộc tên miền khác với trang.
-- Để không phải gõ master password mỗi lần mở, extension giữ nó trong bộ nhớ tạm của trình duyệt
-  (không ghi xuống đĩa) cho tới khi hết thời gian tự khoá, bấm **Khoá**, hoặc đóng trình duyệt.
+- Để gợi ý được ngay trên trang, extension chạy một đoạn mã nhỏ trên mọi trang web, giống
+  1Password, nên Chrome sẽ báo extension "đọc và thay đổi dữ liệu trên các trang web". Đoạn mã đó
+  không giữ mật khẩu: nó chỉ được biết tên và tên đăng nhập của các tài khoản khớp với trang, và chỉ
+  nhận mật khẩu khi bạn bấm chọn một tài khoản. Phần giao diện nằm trong vùng mà trang web không đọc
+  được, và chỉ phản hồi cú bấm thật của bạn, không phản hồi cú bấm giả do trang tạo ra.
+- Mật khẩu chỉ được điền vào trang hoặc khung (iframe) có tên miền khớp với địa chỉ đã lưu.
+- Để không phải gõ master password mỗi lần, extension giữ nó (và danh sách tài khoản dùng để điền)
+  trong bộ nhớ tạm của trình duyệt, không ghi xuống đĩa, cho tới khi hết thời gian tự khoá, bấm
+  **Khoá**, hoặc đóng trình duyệt.
+- Danh sách tài khoản dùng để gợi ý được cập nhật mỗi khi bạn mở KaiPass. Thay đổi làm trên thiết
+  bị khác sẽ có sau lần mở KaiPass kế tiếp.
+- Chưa tự hỏi lưu khi bạn đăng nhập bằng mật khẩu mới.
 - Extension và web app là hai bản cài riêng, cùng đồng bộ với một file trên Drive.
 
 ## Chuyển từ 1Password
@@ -136,6 +149,7 @@ Mã nguồn chính:
 - `src/lib/drive.ts`: đăng nhập Google và gọi Drive API
 - `src/lib/onepux.ts`: nhập file 1Password
 - `src/lib/totp.ts`: mã OTP
-- `src/ext/`: phần riêng của extension (tìm tab, điền vào trang)
+- `src/ext/`: phần riêng của extension: `background.ts` (service worker), `content.ts` (gợi ý trên
+  trang), `fill.ts` (điền vào form)
 - `src/ui/`: giao diện
 - `extension/manifest.json`: khai báo extension

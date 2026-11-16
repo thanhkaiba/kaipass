@@ -181,6 +181,66 @@ const PAGES = {
     await openPopup();
     check('site khác không được gợi ý đăng nhập này', (await ext.getByTestId('suggestions').textContent()).includes('Chưa có đăng nhập'));
 
+    // ---- in-page suggestions (content script) ----
+    const ui = site.locator('kaipass-ui');
+    await site.goto(`http://localhost:${PORT}/login`);
+    await ui.locator('.toast').waitFor({ state: 'visible', timeout: 10000 });
+    check('trang đăng nhập hiện thẻ gợi ý ở góc trên', (await ui.locator('.toast').textContent()).includes('Local site'));
+    if (shots) await site.screenshot({ path: join(shots, 'inline-toast.png') });
+    await ui.locator('.toast .row').first().click();
+    await site.waitForFunction(() => document.querySelector('[name=pass]').value !== '');
+    check('bấm vào thẻ gợi ý là điền tên đăng nhập và mật khẩu', (await site.locator('[name=email]').inputValue()) === 'alice@example.com' && (await site.locator('[name=pass]').inputValue()) === 's3cret-pw');
+    check('thẻ gợi ý tự ẩn sau khi điền', !(await ui.locator('.toast').isVisible()));
+
+    await site.goto(`http://localhost:${PORT}/login`);
+    await site.locator('[name=email]').click();
+    await ui.locator('.badge').waitFor({ state: 'visible' });
+    check('ô đăng nhập có biểu tượng KaiPass', true);
+    await ui.locator('.panel .row').first().waitFor({ state: 'visible' });
+    check('bấm vào ô hiện danh sách tài khoản', (await ui.locator('.panel').textContent()).includes('alice@example.com'));
+    if (shots) await site.screenshot({ path: join(shots, 'inline-panel.png') });
+    await ui.locator('.panel .row').first().click();
+    await site.waitForFunction(() => document.querySelector('[name=pass]').value !== '');
+    check('chọn trong danh sách là điền vào form', (await site.locator('[name=pass]').inputValue()) === 's3cret-pw');
+
+    await site.goto(`http://localhost:${PORT}/otp`);
+    await site.locator('[name=code]').click();
+    await ui.locator('.panel .row').first().waitFor({ state: 'visible' });
+    await ui.locator('.panel .row').first().click();
+    await site.waitForFunction(() => document.querySelector('[name=code]').value.length === 6);
+    check('ô OTP: chọn tài khoản là điền mã OTP', codes().includes(await site.locator('[name=code]').inputValue()));
+
+    // A script on the page cannot trigger a fill by faking a click.
+    await site.goto(`http://localhost:${PORT}/login`);
+    await ui.locator('.toast').waitFor({ state: 'visible' });
+    await site.evaluate(() => document.querySelector('kaipass-ui').shadowRoot.querySelector('.toast .row').click());
+    await site.waitForTimeout(500);
+    check('click giả từ script của trang không làm điền', (await site.locator('[name=pass]').inputValue()) === '');
+
+    // Another site, and a frame from another site, get nothing.
+    await site.goto(`http://127.0.0.1:${PORT}/login`);
+    await site.waitForTimeout(800);
+    check('site khác không hiện thẻ gợi ý', !(await ui.locator('.toast').isVisible().catch(() => false)));
+    await site.locator('[name=email]').click();
+    await ui.locator('.panel').waitFor({ state: 'hidden' });
+    await ui.locator('.badge').click();
+    await ui.locator('.panel .note').waitFor({ state: 'visible' });
+    check('site khác: danh sách báo chưa có đăng nhập', (await ui.locator('.panel').textContent()).includes('Chưa có đăng nhập'));
+    await site.goto(`http://localhost:${PORT}/frame`);
+    const frame = site.frameLocator('iframe');
+    await frame.locator('[name=pass]').click();
+    await frame.locator('kaipass-ui .badge').waitFor({ state: 'visible' });
+    await frame.locator('kaipass-ui .badge').click();
+    await frame.locator('kaipass-ui .panel .note').waitFor({ state: 'visible' });
+    check('khung của site khác trong trang không được gợi ý', (await frame.locator('kaipass-ui .panel').textContent()).includes('Chưa có đăng nhập'));
+
+    // Turning the suggestion card off in settings is respected.
+    await ext.evaluate(() => chrome.storage.local.set({ 'kaipass.inline': { icon: true, toast: false } }));
+    await site.goto(`http://localhost:${PORT}/login`);
+    await site.waitForTimeout(800);
+    check('tắt thẻ gợi ý trong Cài đặt thì trang không hiện thẻ', !(await ui.locator('.toast').isVisible().catch(() => false)));
+    await ext.evaluate(() => chrome.storage.local.remove('kaipass.inline'));
+
     // Locking forgets the remembered master password.
     await ext.getByRole('button', { name: 'Mở bộ lọc' }).click();
     await ext.getByRole('button', { name: 'Khoá' }).click();
@@ -188,6 +248,17 @@ const PAGES = {
     await ext.goto(popupUrl);
     await ext.getByLabel('Master password').waitFor();
     check('bấm Khoá thì lần mở sau phải nhập master password', true);
+    await site.goto(`http://localhost:${PORT}/login`);
+    await site.waitForTimeout(800);
+    check('đã khoá thì không hiện thẻ gợi ý', !(await ui.locator('.toast').isVisible().catch(() => false)));
+    await site.locator('[name=email]').click();
+    await ui.locator('.badge').click();
+    await ui.locator('.panel .action').waitFor({ state: 'visible' });
+    check('đã khoá: danh sách có nút "Mở khoá"', (await ui.locator('.panel .action').textContent()) === 'Mở khoá');
+    const [win] = await Promise.all([ctx.waitForEvent('page'), ui.locator('.panel .action').click()]);
+    await win.waitForLoadState();
+    check('bấm "Mở khoá" mở cửa sổ KaiPass gắn với tab đang xem', /index\.html\?popup&tab=\d+/.test(win.url()), win.url());
+    await win.close();
     const stored = await ext.evaluate(async () => JSON.stringify(await chrome.storage.local.get()) + JSON.stringify({ ...localStorage }));
     check('master password không bị ghi xuống đĩa', !stored.includes(PW), stored.slice(0, 200));
 

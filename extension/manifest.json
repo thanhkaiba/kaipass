@@ -1,22 +1,56 @@
 {
   "manifest_version": 3,
   "name": "KaiPass",
-  "description": "Trình quản lý mật khẩu cá nhân: tự điền mật khẩu và mã OTP, lưu file mã hoá trên Google Drive của bạn.",
+  "description": "Trình quản lý mật khẩu cá nhân: gợi ý và tự điền mật khẩu, mã OTP; lưu file mã hoá trên Google Drive của bạn.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6E++U2Wn7jX9w+IX/JU+eMBKQM16iLMyblcjTj00w/7Hw6k+p66l6fDwtKSy3JyhoehrY43DSYI+EqggfE8PR8fQVojQ+sbed39KOi4gAPJaEd1XfRZMmiyKgtYIq1IE+8JOxKIctEWQ6UAhL/RbtdBzyPsoaKTHWkAUKxd+JNxJ1U4vsuPHVoT28BRzTHwxyA6hpYDljCT/0GNCGTKnYUs/W3GILtw7slEMIPYwHg2l7HqeMkSjoB5Gya6XHEK8srFG7e1+paX5A2bzn4iYKRSESKT5C6G2aeGYqm7KIVJyTfQf3ZULWSEnX/XHlSwaF8IiXdH9aW+0orSroBfw4QIDAQAB",
   "action": {
     "default_popup": "index.html?popup",
     "default_title": "KaiPass",
-    "default_icon": { "16": "icon-16.png", "48": "icon-48.png", "128": "icon-128.png" }
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
   },
-  "icons": { "16": "icon-16.png", "48": "icon-48.png", "128": "icon-128.png" },
-  "permissions": ["activeTab", "scripting", "storage", "identity"],
-  "host_permissions": ["https://www.googleapis.com/*"],
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*"
+  ],
   "content_security_policy": {
     "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com; frame-src 'self' blob:; object-src 'none'"
   },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
       "description": "Mở KaiPass"
     }
   }

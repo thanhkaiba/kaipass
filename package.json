@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "node e2e/run.cjs",
-    "build:ext": "tsc --noEmit && vite build --config vite.ext.config.ts",
+    "build:ext": "tsc --noEmit && node scripts/build-ext.mjs",
     "e2e:ext": "node e2e/ext.cjs"
   },
   "dependencies": {

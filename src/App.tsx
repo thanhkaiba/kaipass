@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { forget, recall, remember } from './ext/browser';
+import { forget, recall, remember, writeFillIndex } from './ext/browser';
 import { preloadGoogle } from './lib/drive';
 import { isExtension, isPopup } from './lib/platform';
 import { autoLockMinutes } from './lib/prefs';
@@ -41,6 +41,15 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Keep the background worker's list of fillable logins in step with the open vault.
+  useEffect(() => {
+    if (phase.k !== 'open' || !isExtension) return;
+    const { session } = phase;
+    const publish = () => void writeFillIndex(session.vault.items());
+    publish();
+    return session.subscribe(publish);
+  }, [phase]);
 
   const lock = useCallback(
     (session: Session) => {

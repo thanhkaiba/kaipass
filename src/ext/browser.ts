@@ -2,30 +2,13 @@ import { forcedTabId, isExtension, isPopup, memory } from '../lib/platform';
 import { parseOtp, totp } from '../lib/totp';
 import type { Item } from '../lib/vault';
 import { fillPage, type FillResult } from './fill';
+import { FILL_INDEX_KEY, hostMatches, hostOf, UNLOCK_KEY, type FillEntry, type UnlockRecord } from './match';
+
+export { hostMatches, hostOf };
 
 export interface PageTab {
   id: number;
   host: string;
-}
-
-/** Host name without "www.", or '' for anything that is not a web address. */
-export function hostOf(url: string): string {
-  try {
-    const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`);
-    if (!/^https?:$/.test(u.protocol)) return '';
-    return u.hostname.replace(/^www\./, '').toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-/**
- * A saved address matches a page when the hosts are equal or one is a subdomain of the other,
- * so a login saved for example.com is offered on login.example.com but never on example.com.evil.net.
- */
-export function hostMatches(saved: string, page: string): boolean {
-  if (!saved || !page) return false;
-  return saved === page || page.endsWith(`.${saved}`) || saved.endsWith(`.${page}`);
 }
 
 export function matchesPage(item: Item, pageHost: string): boolean {
@@ -77,34 +60,50 @@ export function openInTab(): void {
 
 // ---- staying unlocked between popup openings ----
 
-const UNLOCK_KEY = 'kaipass.unlock';
-
 /**
  * The popup is destroyed every time it closes, so the extension keeps the master password in
  * the browser's memory-only session storage until the auto-lock time passes or the browser quits.
+ * Session storage is not readable by content scripts or web pages.
  */
 export async function remember(password: string, minutes: number): Promise<void> {
   if (!isExtension) return;
-  await memory.set(UNLOCK_KEY, { password, until: minutes ? Date.now() + minutes * 60_000 : null });
+  const record: UnlockRecord = { password, until: minutes ? Date.now() + minutes * 60_000 : null, minutes };
+  await memory.set(UNLOCK_KEY, record);
 }
 
 export async function recall(): Promise<string | undefined> {
   if (!isExtension) return undefined;
-  const saved = await memory.get<{ password: string; until: number | null }>(UNLOCK_KEY);
+  const saved = await memory.get<UnlockRecord>(UNLOCK_KEY);
   if (!saved) return undefined;
   if (saved.until !== null && saved.until < Date.now()) {
-    await memory.remove(UNLOCK_KEY);
+    await forget();
     return undefined;
   }
   return saved.password;
 }
 
 export async function forget(): Promise<void> {
-  if (isExtension) await memory.remove(UNLOCK_KEY);
+  if (!isExtension) return;
+  await memory.remove(UNLOCK_KEY);
+  await memory.remove(FILL_INDEX_KEY);
 }
 
 /** Pushes the auto-lock deadline back; call on user activity. */
 export async function touch(minutes: number): Promise<void> {
   const password = await recall();
   if (password) await remember(password, minutes);
+}
+
+/** Publishes the logins the background worker may offer on web pages. */
+export async function writeFillIndex(items: Item[]): Promise<void> {
+  if (!isExtension) return;
+  const entries: FillEntry[] = [];
+  for (const i of items) {
+    if (i.trashed) continue;
+    const urls = [i.url, ...i.fields.filter((f) => /^KP2A_URL/.test(f.name)).map((f) => f.value)];
+    const hosts = [...new Set(urls.map(hostOf).filter(Boolean))];
+    if (!hosts.length) continue;
+    entries.push({ id: i.id, title: i.title, username: i.username, password: i.password, otp: i.otp, hosts });
+  }
+  await memory.set(FILL_INDEX_KEY, entries);
 }
