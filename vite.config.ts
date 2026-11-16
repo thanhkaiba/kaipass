@@ -10,7 +10,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com/gsi/client",
   "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https:",
   "connect-src 'self' https://www.googleapis.com https://accounts.google.com https://api.anthropic.com",
   "frame-src https://accounts.google.com blob:",
   "worker-src 'self'",

@@ -121,7 +121,7 @@ export function AiPasteDialog({
                   checked={picked[i]}
                   onChange={(e) => setPicked(picked.map((p, j) => (j === i ? e.target.checked : p)))}
                 />
-                <Avatar title={d.title} icon={d.type} size={34} />
+                <Avatar title={d.title} icon={d.type} url={d.url} size={34} />
                 <div className="row-main">
                   <div className="row-value">
                     <strong>{d.title}</strong>

@@ -95,6 +95,8 @@ export interface SuggestItem {
   title: string;
   username: string;
   hasOtp: boolean;
+  /** Logo of the site, when it is a well-known one: colours plus an SVG path or a short letter. */
+  brand?: { bg: string; ink: string; path: string; letter?: string };
 }
 
 export type SavePrompt = 'new' | 'update';

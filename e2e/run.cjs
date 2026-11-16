@@ -116,6 +116,7 @@ async function addLogin(page, title, extra = {}) {
   await page.getByLabel('Tên đăng nhập').fill(extra.username ?? 'user@example.com');
   await page.getByLabel('Mật khẩu', { exact: true }).fill(extra.password ?? 'p@ss-' + title);
   if (extra.otp) await page.getByLabel(/Mã bí mật OTP/).fill(extra.otp);
+  if (extra.url) await page.getByLabel('Địa chỉ web').fill(extra.url);
   await page.getByRole('button', { name: 'Lưu' }).click();
   await page.locator('.detail-title h2', { hasText: title }).waitFor();
 }
@@ -629,6 +630,43 @@ async function localFlow(browser) {
   check('bộ icon Emoji', (await page.locator('.sidebar .icon-emoji').count()) > 5);
   await page.getByRole('button', { name: 'Bộ icon KaiPass' }).click();
   await page.getByRole('button', { name: 'Xanh dương' }).click();
+  await page.getByRole('button', { name: 'Đóng' }).click();
+
+  // ---- logos of well-known sites, and website icons ----
+  const avatarOf = (title) => page.locator('.item', { has: page.locator('.item-title', { hasText: new RegExp(`^${title}$`) }) }).locator('.avatar');
+  check('logo: mục "GitHub" có logo GitHub (theo tên)', (await avatarOf('GitHub').getAttribute('data-brand')) === 'github' && (await avatarOf('GitHub').locator('svg path').count()) === 1);
+  await addLogin(page, 'Ngân hàng', { url: 'https://www.vietcombank.com.vn/vi-VN' });
+  check('logo: theo địa chỉ web (Vietcombank, màu thương hiệu + chữ)', (await avatarOf('Ngân hàng').getAttribute('data-brand')) === 'vietcombank' && (await avatarOf('Ngân hàng').textContent()) === 'V');
+  check('logo: hiện cả ở trang chi tiết', (await page.locator('.detail [data-brand="vietcombank"]').count()) === 1);
+  const iconRequests = [];
+  const appIcon = readFileSync(join(__dirname, '../dist/icon-48.png'));
+  const onePixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  await page.route(/^https:\/\/([a-z]+\.)?example\.test\//, (route) => {
+    const u = route.request().url();
+    iconRequests.push(u);
+    // A blank pixel for the first try, a real icon for the second: the blank one must be skipped.
+    route.fulfill({ status: 200, contentType: 'image/png', body: u.endsWith('/favicon.ico') ? appIcon : onePixel });
+  });
+  await addLogin(page, 'Cửa hàng', { url: 'https://shop.example.test/login' });
+  check('icon trang web: mặc định không tải gì từ mạng', iconRequests.length === 0 && (await avatarOf('Cửa hàng').textContent()) === 'C');
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  check('logo: có xem trước trong Cài đặt', (await page.locator('.brand-preview [data-brand]').count()) === 6);
+  await page.getByLabel('Tải icon cho các trang khác').selectOption('site');
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  await avatarOf('Cửa hàng').locator('img[src$="/favicon.ico"]').waitFor();
+  check('icon trang web: lấy từ chính trang, bỏ qua ảnh rỗng', iconRequests.some((u) => u.endsWith('/apple-touch-icon.png')) && (await avatarOf('Cửa hàng').locator('img').getAttribute('src')) === 'https://shop.example.test/favicon.ico');
+  check('icon trang web: không ảnh hưởng mục đã có logo', (await avatarOf('GitHub').locator('img').count()) === 0);
+  await shot(page, '17-logos');
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  await page.getByRole('switch', { name: 'Logo các trang nổi tiếng' }).click();
+  await page.getByLabel('Tải icon cho các trang khác').selectOption('off');
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  check('logo: tắt được, quay về chữ cái', (await avatarOf('GitHub').getAttribute('data-brand')) === null && (await avatarOf('GitHub').textContent()) === 'G' && (await avatarOf('Cửa hàng').textContent()) === 'C');
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  await page.getByRole('switch', { name: 'Logo các trang nổi tiếng' }).click();
   await page.getByRole('button', { name: 'Đóng' }).click();
 
   // Wiping for real, through the guarded path.

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { defaultIconSvg } from './bits';
+import { Avatar, defaultIconSvg } from './bits';
+import { setFavicons, setLogos, useBrandPrefs, type FaviconSource } from './brands';
+import { Setting, Switch } from './Settings';
 import { ACCENTS, EMOJI, getAccent, loadPack, PACKS, setAccent, setPack, useIconPack, type PackId } from './iconPack';
 
 const PREVIEW = ['lock', 'key', 'star', 'card', 'cloud', 'sparkle'];
@@ -34,11 +36,63 @@ function DefaultIcon({ name }: { name: string }) {
   return <span className="icon icon-raw" dangerouslySetInnerHTML={{ __html: defaultIconSvg(name) }} />;
 }
 
+const SAMPLES: [string, string][] = [
+  ['Google', 'accounts.google.com'],
+  ['GitHub', 'github.com'],
+  ['Apple', 'appleid.apple.com'],
+  ['Shopee', 'shopee.vn'],
+  ['Zalo', 'id.zalo.me'],
+  ['Linear', 'linear.app'],
+];
+
+const FAVICON_INFO: Record<FaviconSource, string> = {
+  off: 'Không tải gì từ mạng. Mục không có logo sẵn hiện chữ cái đầu.',
+  site: 'Lấy icon thẳng từ chính trang của mục. Mỗi trang chỉ biết bạn đã tải icon của nó, nhưng mạng bạn dùng (wifi, nhà mạng) thấy được danh sách tên trang.',
+  ddg: 'Nhanh, đủ icon hơn. DuckDuckGo sẽ thấy danh sách tên trang trong vault (không thấy tài khoản hay mật khẩu).',
+};
+
+function BrandSettings() {
+  const { logos, favicons } = useBrandPrefs();
+  return (
+    <div className="stack">
+      <h3>Logo trang web</h3>
+      <Setting
+        icon="star"
+        on={logos}
+        title="Logo các trang nổi tiếng"
+        info="Có sẵn hơn 200 trang (Google, GitHub, Apple, Shopee, Zalo, ngân hàng…), nhận theo địa chỉ web hoặc tên mục. Không cần mạng."
+        sub={
+          <span className="brand-preview">
+            {SAMPLES.map(([t, u]) => (
+              <Avatar key={t} title={t} icon="login" url={u} size={26} />
+            ))}
+          </span>
+        }
+      >
+        <Switch label="Logo các trang nổi tiếng" checked={logos} onChange={setLogos} />
+      </Setting>
+      <Setting icon="cloud" on={favicons !== 'off'} title="Tải icon cho các trang khác" info={FAVICON_INFO[favicons]}>
+        <select
+          aria-label="Tải icon cho các trang khác"
+          value={favicons}
+          style={{ width: 'auto' }}
+          onChange={(e) => setFavicons(e.target.value as FaviconSource)}
+        >
+          <option value="off">Tắt</option>
+          <option value="site">Từ chính trang web</option>
+          <option value="ddg">Qua DuckDuckGo</option>
+        </select>
+      </Setting>
+    </div>
+  );
+}
+
 export function LookSettings() {
   const pack = useIconPack();
   const [accent, setAcc] = useState(getAccent);
   return (
     <>
+      <BrandSettings />
       <div className="stack">
         <h3>Bộ icon</h3>
         <div className="packs" role="radiogroup" aria-label="Bộ icon">

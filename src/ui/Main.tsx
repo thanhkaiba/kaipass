@@ -291,7 +291,7 @@ export function Main({
 
   const itemButton = (i: Item, active: boolean) => (
     <button type="button" className={`item${active ? ' active' : ''}`} onClick={() => open(i)}>
-      <Avatar title={i.title} icon={i.type} />
+      <Avatar title={i.title} icon={i.type} url={i.url} />
       <span className="item-text">
         <span className="item-title">{i.title || '(không tên)'}</span>
         <span className="item-sub">{subtitle(i)}</span>

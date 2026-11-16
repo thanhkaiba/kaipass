@@ -2482,3 +2482,36 @@ kbd {
 .ai-key-row .icon {
   color: var(--ok);
 }
+
+/* Logos of well-known sites (colour comes inline from the brand) */
+.avatar.brand {
+  text-shadow: none;
+  box-shadow: inset 0 0 0 1px rgb(127 127 127 / 18%);
+}
+
+.avatar.brand svg {
+  display: block;
+}
+
+.brand-letter {
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.avatar.favicon {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
+}
+
+.avatar.favicon img {
+  display: block;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.brand-preview {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}

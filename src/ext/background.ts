@@ -6,6 +6,8 @@
  * comes from Chrome (`sender.url`), and credentials are only handed to a frame whose host matches
  * the login's saved address.
  */
+import * as brandData from '../icons/brands';
+import { brandFor, inkOn } from '../lib/brandMatch';
 import { parseOtp, totp } from '../lib/totp';
 import { backgroundSync, saveLogin } from './worker-vault';
 import {
@@ -133,7 +135,16 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
       locked: !record,
       host,
       prefs: await prefs(),
-      items: items.map((e) => ({ id: e.id, title: e.title, username: e.username, hasOtp: !!e.otp })),
+      items: items.map((e) => {
+        const b = brandFor(brandData, e.title, `https://${e.hosts[0] ?? host}`);
+        return {
+          id: e.id,
+          title: e.title,
+          username: e.username,
+          hasOtp: !!e.otp,
+          brand: b ? { bg: `#${b.hex}`, ink: inkOn(b.hex), path: b.path, letter: b.letter } : undefined,
+        };
+      }),
     };
     return reply;
   }

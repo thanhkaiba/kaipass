@@ -28,7 +28,7 @@ import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './
 
 export type Tab = 'security' | 'data' | 'web' | 'ai' | 'look' | 'device';
 
-function Setting({
+export function Setting({
   icon,
   on,
   title,
@@ -60,7 +60,7 @@ function Setting({
   );
 }
 
-function Switch({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+export function Switch({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
       type="button"

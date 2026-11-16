@@ -96,6 +96,8 @@ declare const __KAIPASS_TEST__: boolean;
   .row:hover, .row:focus-visible { background: #e9f0ff; outline: none; }
   .avatar { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px;
     background: #eef1f6; color: #2f6bff; font-weight: 700; }
+  .avatar.brand { font-size: 12px; box-shadow: inset 0 0 0 1px rgb(127 127 127 / 18%); }
+  .avatar.brand svg { width: 17px; height: 17px; display: block; }
   .text { display: flex; flex-direction: column; min-width: 0; }
   .title, .user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .title { font-weight: 600; }
@@ -118,7 +120,7 @@ declare const __KAIPASS_TEST__: boolean;
     .ghost { color: #e8ebf2 !important; border-color: #323a4c !important; }
     .who { background: #242a38 !important; }
     .row:hover, .row:focus-visible { background: #1f2d4a; }
-    .avatar { background: #242a38; color: #6a9cf5; }
+    .avatar:not(.brand) { background: #242a38; color: #6a9cf5; }
     .user, .note, .head .sub, .x { color: #9aa3b8; }
     .x:hover { background: #242a38; }
   }
@@ -161,7 +163,23 @@ declare const __KAIPASS_TEST__: boolean;
     row.type = 'button';
     row.setAttribute('role', 'option');
     row.dataset.id = item.id;
-    const avatar = el('span', 'avatar', (item.title.trim()[0] || '?').toUpperCase());
+    const avatar = el('span', 'avatar', item.brand?.path ? undefined : item.brand?.letter ?? (item.title.trim()[0] || '?').toUpperCase());
+    if (item.brand) {
+      avatar.classList.add('brand');
+      avatar.style.background = item.brand.bg;
+      avatar.style.color = item.brand.ink;
+      if (item.brand.path) {
+        // Built from our own bundled data with DOM calls, never from page text or innerHTML.
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'currentColor');
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', item.brand.path);
+        svg.append(path);
+        avatar.append(svg);
+      }
+    }
     const text = el('span', 'text');
     text.append(el('span', 'title', item.title || '(không tên)'), el('span', 'user', item.username || (item.hasOtp ? 'Mã OTP' : '')));
     row.append(avatar, text);

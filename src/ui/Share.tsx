@@ -401,7 +401,7 @@ export function ShareView({ link }: { link: ParsedLink | undefined }) {
         {item && envelope && (
           <>
             <div className="detail-head">
-              <Avatar title={item.title} icon={item.type} size={44} />
+              <Avatar title={item.title} icon={item.type} url={item.url} size={44} />
               <div className="detail-title">
                 <h2>{item.title || '(không tên)'}</h2>
                 <div className="detail-meta">

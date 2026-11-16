@@ -11,6 +11,7 @@ import {
 import { defaultGen, generatePassword, type GenOptions } from '../lib/generator';
 import { parseOtp, secondsLeft, totp } from '../lib/totp';
 import { EMOJI, useIconPack } from './iconPack';
+import { failedIcons, faviconUrls, inkOn, useBrand, useBrandPrefs } from './brands';
 
 // ---- icons ----
 
@@ -457,13 +458,56 @@ export function PasswordPrompt({
 const HUES = [214, 262, 330, 12, 34, 152, 188, 290];
 
 /** A coloured tile with the item's first letter, so lists are easy to scan. */
-export function Avatar({ title, icon, size = 36 }: { title: string; icon: string; size?: number }) {
+export function Avatar({ title, icon, url = '', size = 36 }: { title: string; icon: string; url?: string; size?: number }) {
+  const brand = useBrand(title, url);
+  const { favicons } = useBrandPrefs();
+  const [, bump] = useState(0);
+  const style = { width: size, height: size };
+  if (brand) {
+    return (
+      <span className="avatar brand" style={{ ...style, background: `#${brand.hex}`, color: inkOn(brand.hex) }} data-brand={brand.id} aria-hidden="true">
+        {brand.path ? (
+          <svg viewBox="0 0 24 24" width={Math.round(size * 0.56)} height={Math.round(size * 0.56)} fill="currentColor">
+            <path d={brand.path} />
+          </svg>
+        ) : (
+          <span className="brand-letter" style={{ fontSize: Math.round(size * (brand.letter!.length > 2 ? 0.3 : brand.letter!.length > 1 ? 0.38 : 0.48)) }}>
+            {brand.letter}
+          </span>
+        )}
+      </span>
+    );
+  }
+  const src = faviconUrls(url, favicons).find((u) => !failedIcons.has(u));
+  if (src) {
+    const fail = () => {
+      failedIcons.add(src);
+      bump((n) => n + 1);
+    };
+    return (
+      <span className="avatar favicon" style={style} aria-hidden="true">
+        <img
+          key={src}
+          src={src}
+          alt=""
+          width={Math.round(size * 0.62)}
+          height={Math.round(size * 0.62)}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          // Some sites answer with a 1×1 pixel instead of an error.
+          onLoad={(e) => e.currentTarget.naturalWidth < 8 && fail()}
+          onError={fail}
+        />
+      </span>
+    );
+  }
   const letter = (title.trim()[0] ?? '').toUpperCase();
   let h = 0;
   for (const c of title) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const hue = HUES[h % HUES.length];
   return (
-    <span className="avatar" style={{ width: size, height: size, ['--hue' as string]: hue }} aria-hidden="true">
+    <span className="avatar" style={{ ...style, ['--hue' as string]: hue }} aria-hidden="true">
       {letter && /[\p{L}\p{N}]/u.test(letter) ? letter : <Icon name={icon} />}
     </span>
   );

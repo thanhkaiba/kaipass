@@ -6,6 +6,8 @@ import { normalizeOtp, parseOtp, totp } from './totp';
 import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from './share';
 import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongRecoveryKey } from './recovery';
 import { matchScore } from '../ext/match';
+import * as brandData from '../icons/brands';
+import { brandFor, faviconUrls, inkOn } from './brandMatch';
 import { otpFromQrText } from './qr';
 import { buildKit, extractKey } from './recoveryKit';
 import { Vault, WrongPasswordError } from './vault';
@@ -382,5 +384,64 @@ describe('recovery kit', () => {
     expect(extractKey('kaipass-recovery:' + key)).toBe(key);
     expect(extractKey(key.toLowerCase().replace(/-/g, ' '))).toBe(key);
     expect(extractKey('nothing here')).toBeUndefined();
+  });
+});
+
+describe('site logos', () => {
+  const id = (title: string, url: string) => brandFor(brandData, title, url)?.id ?? null;
+
+  it('picks the most specific service of a host', () => {
+    expect(id('x', 'https://mail.google.com/mail/u/0')).toBe('gmail');
+    expect(id('x', 'accounts.google.com')).toBe('google');
+    expect(id('x', 'https://drive.google.com')).toBe('googledrive');
+    expect(id('x', 'https://foo.atlassian.net/jira')).toBe('jira');
+    expect(id('x', 'https://signin.aws.amazon.com/')).toBe('aws');
+  });
+
+  it('knows a site under any country suffix', () => {
+    expect(id('x', 'https://www.google.com.vn')).toBe('google');
+    expect(id('x', 'shopee.vn')).toBe('shopee');
+    expect(id('x', 'https://shopee.co.id/login')).toBe('shopee');
+    expect(id('x', 'https://www.amazon.co.jp')).toBe('amazon');
+    expect(id('x', 'https://github.com/login')).toBe('github');
+    expect(id('x', 'https://bitbucket.org')).toBe('bitbucket');
+    expect(id('x', 'https://linear.app/team')).toBe('linear');
+    expect(id('x', 'https://appleid.apple.com')).toBe('apple');
+  });
+
+  it("does not give a platform's logo to the user's own site hosted on it", () => {
+    expect(id('Blog', 'https://me.github.io')).toBeNull();
+    expect(id('App', 'https://my-app.vercel.app')).toBeNull();
+    expect(id('Shop', 'https://notshopee.vn')).toBeNull();
+  });
+
+  it('falls back to the title, but not for everyday words', () => {
+    expect(id('GitHub - theo', '')).toBe('github');
+    expect(id('Vietcombank', '')).toBe('vietcombank');
+    expect(id('Google (công việc)', 'https://sso.mycompany.com')).toBe('google');
+    expect(id('Line', '')).toBeNull();
+    expect(id('Signal', '')).toBeNull();
+    expect(id('Wifi nhà', '')).toBeNull();
+    expect(id('GitHub', 'androidapp://com.github.android')).toBe('github');
+  });
+
+  it('has a letter instead of a logo for brands Simple Icons does not carry', () => {
+    const b = brandFor(brandData, 'x', 'https://www.linkedin.com')!;
+    expect(b.path).toBe('');
+    expect(b.letter).toBe('in');
+  });
+
+  it('chooses readable ink and website icon addresses', () => {
+    expect(inkOn('FFFFFF')).toBe('#111');
+    expect(inkOn('181717')).toBe('#fff');
+    expect(faviconUrls('https://a.example.co.uk/x', 'off')).toEqual([]);
+    expect(faviconUrls('https://a.example.co.uk/x', 'site')).toEqual([
+      'https://a.example.co.uk/apple-touch-icon.png',
+      'https://a.example.co.uk/favicon.ico',
+      'https://example.co.uk/apple-touch-icon.png',
+      'https://example.co.uk/favicon.ico',
+    ]);
+    expect(faviconUrls('example.com', 'ddg')).toEqual(['https://icons.duckduckgo.com/ip3/example.com.ico']);
+    expect(faviconUrls('androidapp://com.x', 'site')).toEqual([]);
   });
 });

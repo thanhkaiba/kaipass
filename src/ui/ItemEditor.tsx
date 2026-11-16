@@ -52,7 +52,7 @@ export function ItemEditor({
   return (
     <form className="detail editor" onSubmit={submit}>
       <header className="detail-head">
-        <Avatar title={d.title} icon={d.type} size={48} />
+        <Avatar title={d.title} icon={d.type} url={d.url} size={48} />
         <div className="detail-title">
           <h2>{d.title.trim() || (initial.id ? 'Sửa' : `${TYPE_LABEL[d.type]} mới`)}</h2>
           <div className="detail-meta">
