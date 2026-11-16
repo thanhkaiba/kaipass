@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { GOOGLE_CLIENT_ID } from '../config';
 import { Drive, preloadGoogle } from '../lib/drive';
 import { isExtension } from '../lib/platform';
 import { FILE_NAME, Session } from '../lib/session';
 import { Vault } from '../lib/vault';
 import { errorText, Icon, passwordProblem, SecretInput, TextInput } from './bits';
 
-const ENV_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+const ENV_CLIENT_ID: string = GOOGLE_CLIENT_ID;
 const CLIENT_ID_KEY = 'kaipass.clientId';
 
 export function savedClientId(): string {

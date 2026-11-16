@@ -192,7 +192,7 @@ const PAGES = {
     await ext.getByRole('button', { name: 'Xoá dữ liệu trên thiết bị này' }).click();
     await ext.getByRole('button', { name: /Lưu trên Google Drive/ }).click();
     check('hiện địa chỉ redirect cần khai báo với Google', (await ext.locator('code.wrap').textContent()) === `https://${EXT_ID}.chromiumapp.org/`);
-    await ext.getByLabel('Google OAuth Client ID').fill('test-client.apps.googleusercontent.com');
+    
     await ext.getByRole('button', { name: 'Đăng nhập Google' }).click();
     await ext.getByLabel('Master password', { exact: true }).fill(PW);
     await ext.getByLabel('Nhập lại').fill(PW);

@@ -49,6 +49,7 @@ Tên menu trong Google Cloud Console có thể thay đổi đôi chút.
 5. **Clients → Create client → Web application**. Ở **Authorized JavaScript origins**, thêm địa chỉ
    nơi bạn chạy app, ví dụ `https://<tên-github>.github.io` và `http://localhost:5173`.
 6. Copy **Client ID** (dạng `1234…apps.googleusercontent.com`). Đây không phải bí mật.
+7. Ghi Client ID vào `src/config.ts` (repo này đã ghi sẵn Client ID của chủ repo).
 
 ### 2. Đưa app lên GitHub Pages
 
@@ -56,7 +57,7 @@ Mỗi lần push lên `main`, workflow `.github/workflows/publish.yml` build app
 nhánh `gh-pages`.
 
 1. **Settings → Secrets and variables → Actions → Variables**: tạo biến `GOOGLE_CLIENT_ID` với
-   Client ID ở trên. Nếu bỏ qua, app sẽ hỏi Client ID khi kết nối Drive.
+   Client ID ở trên, nếu muốn dùng Client ID khác với `src/config.ts`. Không bắt buộc.
 2. **Settings → Pages → Source: Deploy from a branch**, chọn nhánh `gh-pages`, thư mục `/ (root)`.
 3. App chạy tại `https://<tên-github>.github.io/<tên-repo>/`.
 

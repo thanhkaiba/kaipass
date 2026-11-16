@@ -227,7 +227,7 @@ async function driveFlow(browser) {
 
   const a = await device(browser, drive);
   await a.page.getByRole('button', { name: /Lưu trên Google Drive/ }).click();
-  await a.page.getByLabel('Google OAuth Client ID').fill('test-client.apps.googleusercontent.com');
+  
   await a.page.getByRole('button', { name: 'Đăng nhập Google' }).click();
   await a.page.getByLabel('Master password', { exact: true }).fill(PW);
   await a.page.getByLabel('Nhập lại').fill(PW);
@@ -243,7 +243,7 @@ async function driveFlow(browser) {
 
   const b = await device(browser, drive, { width: 390, height: 800 });
   await b.page.getByRole('button', { name: /Lưu trên Google Drive/ }).click();
-  await b.page.getByLabel('Google OAuth Client ID').fill('test-client.apps.googleusercontent.com');
+  
   await b.page.getByRole('button', { name: 'Đăng nhập Google' }).click();
   await b.page.getByRole('heading', { name: 'Đã tìm thấy vault trên Drive' }).waitFor();
   await b.page.getByLabel('Master password').fill(PW);
