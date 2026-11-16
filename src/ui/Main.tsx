@@ -9,6 +9,8 @@ import { ItemEditor } from './ItemEditor';
 import { ItemView } from './ItemView';
 import { pushRecovery } from '../lib/recovery';
 import { cleanupExpiredShares, sharedToDraft, takeIncoming } from '../lib/share';
+import type { OtpAccount } from '../lib/qr';
+import { QrScanDialog } from './QrScan';
 import { Settings } from './Settings';
 import { ImportShareDialog } from './Share';
 import { blankDraft, TYPE_LABEL, TYPES } from './types';
@@ -84,6 +86,7 @@ export function Main({
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<PageTab | undefined>();
   const [importing, setImporting] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   // An item someone shared, brought over from the link page ("Lưu vào KaiPass").
   useEffect(() => {
@@ -186,6 +189,22 @@ export function Main({
     setDraft(blankDraft(type, filter.k === 'folder' ? filter.id : ''));
     setPane('detail');
   };
+
+  /** Adds every account of a Google Authenticator export as a login with its OTP. */
+  const importMany = (accounts: OtpAccount[]) =>
+    change(() => {
+      for (const a of accounts) {
+        vault.upsert({
+          ...blankDraft('login', filter.k === 'folder' ? filter.id : ''),
+          title: a.issuer || a.account || 'OTP',
+          username: a.account,
+          otp: a.uri,
+        });
+      }
+    }).then(() => {
+      setDraft(null);
+      toast(`Đã thêm ${accounts.length} tài khoản có mã OTP`);
+    });
 
   const save = async (d: ItemDraft) => {
     const id = vault.upsert(d);
@@ -359,6 +378,16 @@ export function Main({
                   role="menuitem"
                   onClick={() => {
                     setAdding(false);
+                    setScanning(true);
+                  }}
+                >
+                  <Icon name="qr" /> Quét mã QR (OTP)…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setAdding(false);
                     setImporting(true);
                   }}
                 >
@@ -462,6 +491,7 @@ export function Main({
             initial={draft}
             folders={folders}
             onSave={save}
+            onImportMany={importMany}
             onCancel={() => {
               setDraft(null);
               if (!current) setPane('list');
@@ -487,6 +517,25 @@ export function Main({
           </div>
         )}
       </main>
+
+      {scanning && (
+        <QrScanDialog
+          onClose={() => setScanning(false)}
+          onFound={(result, page) => {
+            setScanning(false);
+            if (result.accounts.length > 1) return importMany(result.accounts);
+            const a = result.accounts[0];
+            setDraft({
+              ...blankDraft('login', filter.k === 'folder' ? filter.id : ''),
+              title: a.issuer || a.account || page?.host || '',
+              username: a.account,
+              otp: a.uri,
+              url: page ? `https://${page.host}` : '',
+            });
+            setPane('detail');
+          }}
+        />
+      )}
 
       {importing && (
         <ImportShareDialog

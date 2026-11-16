@@ -11,6 +11,17 @@ const { strToU8, zipSync } = require('fflate');
 const kdbxweb = require('kdbxweb');
 const { argon2id, argon2d } = require('hash-wasm');
 const { fakeDrive } = require('./fake-drive.cjs');
+const QRCode = require('qrcode');
+
+/** Google Authenticator export payload (protobuf), as its "Export accounts" QR code holds it. */
+function migrationUri(entries) {
+  const varint = (n) => { const o = []; while (n > 127) { o.push((n & 0x7f) | 0x80); n >>>= 7; } o.push(n); return o; };
+  const bytes = (f, b) => [...varint(f * 8 + 2), ...varint(b.length), ...b];
+  const num = (f, n) => [...varint(f * 8), ...varint(n)];
+  const text = (t) => [...Buffer.from(t, 'utf8')];
+  const payload = entries.flatMap((e) => bytes(1, [...bytes(1, [...Buffer.from(e.secret)]), ...bytes(2, text(e.name)), ...bytes(3, text(e.issuer)), ...num(4, 1), ...num(5, 1), ...num(6, 2)]));
+  return `otpauth-migration://offline?data=${encodeURIComponent(Buffer.from([...payload, ...num(2, 1)]).toString('base64'))}`;
+}
 
 const PORT = 4173;
 const URL_ = `http://localhost:${PORT}/`;
@@ -41,9 +52,9 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
-function totpNow(secretAscii) {
+function totpNow(secretAscii, offsetMs = 0) {
   const counter = Buffer.alloc(8);
-  counter.writeUInt32BE(Math.floor(Date.now() / 30000), 4);
+  counter.writeUInt32BE(Math.floor((Date.now() + offsetMs) / 30000), 4);
   const mac = createHmac('sha1', secretAscii).update(counter).digest();
   const off = mac[mac.length - 1] & 15;
   return String((mac.readUInt32BE(off) & 0x7fffffff) % 1e6).padStart(6, '0');
@@ -440,6 +451,58 @@ async function localFlow(browser) {
     return secrets.filter((x) => text.includes(x));
   }, [PW, PW2, recoveryKey, recoveryKey.replace(/-/g, '')]);
   check('vân tay và khoá khôi phục không để lộ mật khẩu trong bộ nhớ trình duyệt', leaked2.length === 0, leaked2.join());
+
+  // ---- adding OTP from a QR code, without a camera ----
+  const qrDir = mkdtempSync(join(tmpdir(), 'kaipass-qr-'));
+  const qrFile = async (name, text) => {
+    const path = join(qrDir, name);
+    await QRCode.toFile(path, text, { width: 360, margin: 4 });
+    return path;
+  };
+  await page.getByRole('button', { name: 'Thêm', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Đăng nhập' }).click();
+  await page.getByRole('button', { name: 'Quét mã QR' }).click();
+  await page.getByLabel('Chọn ảnh có mã QR').setInputFiles(await qrFile('dropbox.png', 'otpauth://totp/Dropbox:me%40example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Dropbox'));
+  await page.getByText('Đã thêm mã OTP').waitFor();
+  check('quét QR từ ảnh: điền mã OTP, tên và tên đăng nhập', (await page.getByLabel('Tên', { exact: true }).inputValue()) === 'Dropbox' && (await page.getByLabel('Tên đăng nhập').inputValue()) === 'me@example.com');
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.locator('.detail-title h2', { hasText: 'Dropbox' }).waitFor();
+  const scannedCode = await otpText(page);
+  check('mục quét từ QR có mã OTP đúng', scannedCode === totpNow('12345678901234567890') || scannedCode === totpNow('12345678901234567890', -30000), scannedCode);
+
+  // A screenshot pasted with Ctrl+V.
+  const pngB64 = (await QRCode.toBuffer('otpauth://totp/Notion:team%40example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Notion', { width: 300, margin: 4 })).toString('base64');
+  await page.getByRole('button', { name: 'Thêm', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Quét mã QR (OTP)…' }).click();
+  await shot(page, '14-qr-scan');
+  await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'screenshot.png', { type: 'image/png' }));
+    document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+  }, pngB64);
+  await page.getByLabel('Tên', { exact: true }).waitFor();
+  check('dán ảnh chụp màn hình có QR: mở sẵn mục mới có OTP', (await page.getByLabel('Tên', { exact: true }).inputValue()) === 'Notion');
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.locator('.detail-title h2', { hasText: 'Notion' }).waitFor();
+
+  // A Google Authenticator export with several accounts.
+  await page.getByRole('button', { name: 'Thêm', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Quét mã QR (OTP)…' }).click();
+  await page.getByLabel('Chọn ảnh có mã QR').setInputFiles(await qrFile('ga.png', migrationUri([
+    { secret: '12345678901234567890', name: 'theo@example.com', issuer: 'AWS' },
+    { secret: '12345678901234567890', name: 'theo.shop', issuer: 'Shopee' },
+  ])));
+  await page.getByText('Đã thêm 2 tài khoản có mã OTP').waitFor();
+  const afterGa = await titles(page);
+  check('mã xuất từ Google Authenticator: thêm đủ các tài khoản', afterGa.includes('AWS') && afterGa.includes('Shopee'), afterGa.join());
+
+  await page.getByRole('button', { name: 'Thêm', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Quét mã QR (OTP)…' }).click();
+  await page.getByLabel('Chọn ảnh có mã QR').setInputFiles(await qrFile('url.png', 'https://example.com/not-otp'));
+  await page.getByRole('alert').waitFor();
+  check('QR không phải mã OTP: báo rõ', (await page.getByRole('alert').textContent()).includes('không phải mã xác thực hai bước'));
+  await page.getByRole('button', { name: 'Đóng' }).click();
 
   // Wiping for real, through the guarded path.
   await page.getByRole('button', { name: 'Khoá' }).click();

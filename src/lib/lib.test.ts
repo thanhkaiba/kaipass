@@ -6,6 +6,7 @@ import { normalizeOtp, parseOtp, totp } from './totp';
 import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from './share';
 import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongRecoveryKey } from './recovery';
 import { matchScore } from '../ext/match';
+import { otpFromQrText } from './qr';
 import { Vault, WrongPasswordError } from './vault';
 
 const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
@@ -316,5 +317,56 @@ describe('address matching', () => {
     expect(matchScore('localhost', '127.0.0.1')).toBe(0);
     expect(matchScore('a.localhost', 'b.localhost')).toBe(0);
     expect(matchScore('', page)).toBe(0);
+  });
+});
+
+/** Builds a Google Authenticator export payload (protobuf) for the tests. */
+export function migrationUri(entries: { secret: number[]; name: string; issuer: string; type?: number }[]): string {
+  const varint = (n: number) => {
+    const out: number[] = [];
+    while (n > 127) {
+      out.push((n & 0x7f) | 0x80);
+      n >>>= 7;
+    }
+    out.push(n);
+    return out;
+  };
+  const bytes = (field: number, b: number[]) => [...varint(field * 8 + 2), ...varint(b.length), ...b];
+  const num = (field: number, n: number) => [...varint(field * 8), ...varint(n)];
+  const text = (s: string) => [...new TextEncoder().encode(s)];
+  const payload = entries.flatMap((e) =>
+    bytes(1, [...bytes(1, e.secret), ...bytes(2, text(e.name)), ...bytes(3, text(e.issuer)), ...num(4, 1), ...num(5, 1), ...num(6, e.type ?? 2)]),
+  );
+  return `otpauth-migration://offline?data=${encodeURIComponent(btoa(String.fromCharCode(...payload, ...num(2, 1))))}`;
+}
+
+describe('OTP QR codes', () => {
+  it('reads a standard otpauth code with issuer and account', () => {
+    const r = otpFromQrText('otpauth://totp/GitHub:theo%40example.com?secret=GEZDGNBVGY3TQOJQ&issuer=GitHub');
+    expect(r.accounts).toHaveLength(1);
+    expect(r.accounts[0]).toMatchObject({ issuer: 'GitHub', account: 'theo@example.com' });
+  });
+
+  it('reads Google Authenticator exports and skips counter-based codes', async () => {
+    const secret = [...new TextEncoder().encode('12345678901234567890')];
+    const uri = migrationUri([
+      { secret, name: 'theo@example.com', issuer: 'AWS' },
+      { secret, name: 'Shopee:theo.shop', issuer: 'Shopee' },
+      { secret, name: 'old', issuer: 'Bank', type: 1 },
+    ]);
+    const r = otpFromQrText(uri);
+    expect(r.skipped).toBe(1);
+    expect(r.accounts.map((a) => [a.issuer, a.account])).toEqual([
+      ['AWS', 'theo@example.com'],
+      ['Shopee', 'theo.shop'],
+    ]);
+    // The secret survives the round trip: same codes as the RFC 6238 test vector.
+    const { parseOtp, totp } = await import('./totp');
+    expect(await totp(parseOtp(r.accounts[0].uri), 59_000)).toBe('287082');
+  });
+
+  it('explains codes that are not two-factor codes', () => {
+    expect(() => otpFromQrText('https://example.com')).toThrow(/không phải/);
+    expect(() => otpFromQrText('otpauth://hotp/x?secret=GEZDGNBVGY3TQOJQ&counter=1')).toThrow(/HOTP/);
   });
 });

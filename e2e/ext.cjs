@@ -9,6 +9,7 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 const { fakeDrive } = require('./fake-drive.cjs');
+const QRCode = require('qrcode');
 const kdbxweb = require('kdbxweb');
 const { argon2id, argon2d } = require('hash-wasm');
 
@@ -78,6 +79,7 @@ const PAGES = {
 };
 
 (async () => {
+  PAGES['/qr'] = `<h1>Bật xác thực hai bước</h1><img alt="qr" src="${await QRCode.toDataURL('otpauth://totp/Local%20site:alice%40example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Local%20site', { width: 260, margin: 4 })}">`;
   const server = http
     .createServer((req, res) => {
       const body = PAGES[req.url.split('?')[0]];
@@ -154,6 +156,26 @@ const PAGES = {
     const csp = await ext.evaluate(() => window.__csp);
     check('extension mở được PDF đính kèm (không bị CSP chặn)', csp.length === 0, csp.join(' | '));
     await ext.getByRole('button', { name: 'Đóng' }).click();
+
+    // Scanning the QR code shown in the page (the 2FA set-up screen of a site).
+    await site.goto(`http://localhost:${PORT}/qr`);
+    await site.bringToFront();
+    const scanWin = await (async () => {
+      const [w] = await Promise.all([
+        ctx.waitForEvent('page'),
+        ext.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 420, height: 640, focused: false }), popupUrl),
+      ]);
+      return w;
+    })();
+    await scanWin.getByTestId('suggestions').waitFor();
+    await scanWin.getByRole('button', { name: 'Thêm', exact: true }).click();
+    await scanWin.getByRole('menuitem', { name: 'Quét mã QR (OTP)…' }).click();
+    await scanWin.getByRole('button', { name: /Quét trên trang đang mở/ }).click();
+    await scanWin.getByLabel('Tên', { exact: true }).waitFor({ timeout: 10000 });
+    check('extension: quét mã QR hiện trên trang đang mở', (await scanWin.getByLabel('Tên', { exact: true }).inputValue()) === 'Local site' && (await scanWin.getByLabel('Địa chỉ web', { exact: true }).inputValue()) === 'https://localhost');
+    if (shots) await scanWin.screenshot({ path: join(shots, 'ext-qr.png') });
+    await scanWin.close();
+    await site.goto(`http://localhost:${PORT}/login`);
 
     // Reopening the popup must not ask for the master password again.
     await openPopup();

@@ -59,6 +59,14 @@ export async function fillTab(tab: PageTab, item: Item): Promise<FillResult & { 
   return total;
 }
 
+/** A screenshot of what the page's tab shows (the toolbar popup itself is not in it). */
+export async function captureTab(tab: PageTab): Promise<Blob> {
+  const { windowId } = await chrome.tabs.get(tab.id);
+  const url = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+  const bytes = Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0));
+  return new Blob([bytes], { type: 'image/png' });
+}
+
 export function openInTab(): void {
   void chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
 }

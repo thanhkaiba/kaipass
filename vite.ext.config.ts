@@ -20,7 +20,8 @@ export default defineConfig({
         const manifest = JSON.parse(readFileSync(path('./extension/manifest.json'), 'utf8'));
         manifest.version = JSON.parse(readFileSync(path('./package.json'), 'utf8')).version;
         // Only for the automated test: lets it fill a local page without a real toolbar click.
-        if (process.env.KAIPASS_TEST_HOSTS) manifest.host_permissions.push('http://localhost/*', 'http://127.0.0.1/*');
+        // (<all_urls> stands in for the activeTab grant a toolbar click gives, e.g. for tab screenshots.)
+        if (process.env.KAIPASS_TEST_HOSTS) manifest.host_permissions.push('http://localhost/*', 'http://127.0.0.1/*', '<all_urls>');
         this.emitFile({ type: 'asset', fileName: 'manifest.json', source: JSON.stringify(manifest, null, 2) });
       },
     },

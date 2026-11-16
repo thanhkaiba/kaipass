@@ -27,6 +27,8 @@ export default defineConfig(({ command, mode }) => ({
       registerType: 'autoUpdate',
       injectRegister: 'script',
       includeAssets: ['icon.svg'],
+      // Fonts are cached too, so the app looks the same offline.
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2}'] },
       manifest: {
         name: 'KaiPass',
         short_name: 'KaiPass',

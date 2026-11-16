@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import './fonts.css';
 import './styles.css';
 
 // A share link pasted into a tab that already shows KaiPass only changes the #fragment; reload so

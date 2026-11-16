@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { normalizeOtp } from '../lib/totp';
+import type { OtpAccount } from '../lib/qr';
 import type { Folder, ItemDraft, ItemField } from '../lib/vault';
-import { Avatar, errorText, Generator, Icon, IconButton, SecretInput, TextInput } from './bits';
+import { QrScanDialog } from './QrScan';
+import { Avatar, errorText, Generator, Icon, IconButton, SecretInput, TextInput, useToast } from './bits';
 import { TYPE_LABEL } from './types';
 
 export function ItemEditor({
@@ -9,12 +11,17 @@ export function ItemEditor({
   folders,
   onSave,
   onCancel,
+  onImportMany,
 }: {
   initial: ItemDraft;
   folders: Folder[];
   onSave: (d: ItemDraft) => Promise<void>;
   onCancel: () => void;
+  /** A Google Authenticator export holds several accounts: add them all as new items. */
+  onImportMany?: (accounts: OtpAccount[]) => void;
 }) {
+  const [scanning, setScanning] = useState(false);
+  const toast = useToast();
   const [d, setD] = useState<ItemDraft>(initial);
   const [tags, setTags] = useState(initial.tags.join(', '));
   const [gen, setGen] = useState(false);
@@ -102,10 +109,11 @@ export function ItemEditor({
             <TextInput label="Địa chỉ web" value={d.url} onChange={(url) => set({ url })} placeholder="https://" />
             <SecretInput
               label="Mã bí mật OTP"
-              hint="Dán chuỗi otpauth://… hoặc secret key (chuỗi chữ và số) mà trang web đưa khi bật xác thực hai bước."
+              hint="Quét mã QR (nút bên phải), hoặc dán chuỗi otpauth://… hay secret key mà trang web đưa khi bật xác thực hai bước."
               value={d.otp}
               onChange={(otp) => set({ otp })}
               mono
+              extra={<IconButton icon="qr" label="Quét mã QR" tip="Quét mã QR: trên trang, ảnh chụp màn hình, ảnh, camera" onClick={() => setScanning(true)} />}
             />
           </>
         )}
@@ -171,6 +179,22 @@ export function ItemEditor({
           <TextInput label="Nhãn" hint="Cách nhau bằng dấu phẩy" value={tags} onChange={setTags} placeholder="công việc, ngân hàng" />
         </div>
       </section>
+      {scanning && (
+        <QrScanDialog
+          onClose={() => setScanning(false)}
+          onFound={(result) => {
+            setScanning(false);
+            if (result.accounts.length > 1 && onImportMany) return onImportMany(result.accounts);
+            const a = result.accounts[0];
+            set({
+              otp: a.uri,
+              title: d.title.trim() ? d.title : a.issuer || a.account,
+              username: d.username.trim() ? d.username : a.account,
+            });
+            toast(result.skipped ? `Đã thêm mã OTP (bỏ qua ${result.skipped} mã không hỗ trợ)` : 'Đã thêm mã OTP');
+          }}
+        />
+      )}
     </form>
   );
 }
