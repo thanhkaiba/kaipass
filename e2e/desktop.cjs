@@ -6,7 +6,14 @@ const { mkdtempSync, readFileSync, existsSync, writeFileSync } = require('node:f
 const http = require('node:http');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
-const { _electron } = require('playwright');
+// Driving Electron needs no browser download, so the small "playwright-core" is enough (CI uses it).
+const { _electron } = (() => {
+  try {
+    return require('playwright');
+  } catch {
+    return require('playwright-core');
+  }
+})();
 const QRCode = require('qrcode');
 const { fakeDrive } = require('./fake-drive.cjs');
 
