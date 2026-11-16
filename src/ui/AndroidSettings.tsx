@@ -43,7 +43,18 @@ export function AndroidAutofillSettings() {
           <strong>Khi vault đang khoá:</strong> chạm <em>Mở khoá KaiPass</em>, mở bằng vân tay, rồi chọn tài khoản.
         </li>
       </ul>
-      {info && <p className="muted small">KaiPass cho Android {info.version}</p>}
+      {info && (
+        <div className="muted small app-id">
+          <div>KaiPass cho Android {info.version}</div>
+          {/* What the Android OAuth client in Google Cloud must match for Drive sign-in. */}
+          <div>
+            Package: <span className="mono">{info.package}</span>
+          </div>
+          <div>
+            SHA-1: <span className="mono">{info.sha1}</span>
+          </div>
+        </div>
+      )}
     </>
   );
 }

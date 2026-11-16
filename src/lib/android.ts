@@ -55,6 +55,9 @@ export function onNative(event: string, fn: (data: unknown) => void): () => void
 export interface AndroidInfo {
   version: string;
   sdk: number;
+  /** This app's package and signing certificate SHA-1, for the Google Cloud setup. */
+  package: string;
+  sha1: string;
   autofill: { supported: boolean; enabled: boolean };
   bio: { available: boolean; enrolled: boolean };
 }

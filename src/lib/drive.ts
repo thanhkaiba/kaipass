@@ -175,6 +175,8 @@ export class Drive {
       headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
+      // Google Play services caches tokens: tell it this one is dead, or it hands it out again.
+      if (isAndroid) await native('googleClearToken', { token }).catch(() => {});
       await this.signOut();
       throw new AuthNeeded();
     }

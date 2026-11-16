@@ -34,7 +34,7 @@ function fakeNative() {
   };
   n.handle = (method, args) => {
     n.calls.push(method);
-    const info = () => ({ platform: 'android', version: '0.1.0', sdk: 35, autofill: { supported: true, enabled: n.autofill }, bio: { available: true, enrolled: !!n.bio } });
+    const info = () => ({ platform: 'android', version: '0.1.0', sdk: 35, package: 'io.github.thanhkaiba.kaipass', sha1: 'DC:A5:E3:99', autofill: { supported: true, enabled: n.autofill }, bio: { available: true, enrolled: !!n.bio } });
     switch (method) {
       case 'hello':
       case 'info':
@@ -183,6 +183,7 @@ async function run(browser) {
   await page.getByRole('button', { name: 'Tự điền', exact: true }).click();
   check('Android: Cài đặt → Tự điền báo chưa bật', (await page.locator('.setting', { hasText: 'Dịch vụ tự điền' }).textContent()).includes('Chưa bật'));
   await shot('settings-autofill');
+  check('Android: Cài đặt cho thấy package và SHA-1 để đối chiếu với Google Cloud', (await page.locator('.app-id').textContent()).includes('SHA-1: DC:A5:E3:99'));
   await page.locator('.setting', { hasText: 'Dịch vụ tự điền' }).getByRole('button', { name: 'Bật' }).click();
   await page.evaluate(() => window.__emit('resume'));
   await page.getByText('KaiPass đang tự điền').waitFor();

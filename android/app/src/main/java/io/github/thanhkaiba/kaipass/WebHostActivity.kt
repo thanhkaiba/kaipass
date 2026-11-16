@@ -53,6 +53,7 @@ abstract class WebHostActivity : FragmentActivity() {
     private var cameraUri: Uri? = null
     private var onDocument: ((Uri?) -> Unit)? = null
     private var onSender: ((ActivityResult) -> Unit)? = null
+    private var onIntent: ((ActivityResult) -> Unit)? = null
 
     private val chooseFiles = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val cb = fileCallback ?: return@registerForActivityResult
@@ -76,6 +77,16 @@ abstract class WebHostActivity : FragmentActivity() {
     private val senderLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
         onSender?.invoke(r)
         onSender = null
+    }
+
+    private val intentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        onIntent?.invoke(r)
+        onIntent = null
+    }
+
+    fun launchIntentForResult(intent: Intent, then: (ActivityResult) -> Unit) {
+        onIntent = then
+        intentLauncher.launch(intent)
     }
 
     fun launchForResult(sender: IntentSender, then: (ActivityResult) -> Unit) {
@@ -191,6 +202,7 @@ abstract class WebHostActivity : FragmentActivity() {
         when (method) {
             "hello", "info" -> ok(info())
             "googleToken" -> GoogleAuth.token(this, args.optBoolean("interactive"), ok, fail)
+            "googleClearToken" -> { GoogleAuth.clear(this, args.optString("token")); ok(true) }
             "bioEnroll" -> Bio.enroll(this, args.getString("password"), { ok(true) }, fail)
             "bioUnlock" -> Bio.unlock(this, { ok(JSONObject().put("password", it)) }, fail)
             "bioDisable" -> { Bio.disable(this); ok(true) }
@@ -228,6 +240,8 @@ abstract class WebHostActivity : FragmentActivity() {
             .put("platform", "android")
             .put("version", BuildConfig.VERSION_NAME)
             .put("sdk", Build.VERSION.SDK_INT)
+            .put("package", packageName)
+            .put("sha1", GoogleAuth.signingSha1(this))
             .put("autofill", JSONObject()
                 .put("supported", af?.isAutofillSupported == true)
                 .put("enabled", af?.hasEnabledAutofillServices() == true))
