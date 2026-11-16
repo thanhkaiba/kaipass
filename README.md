@@ -12,8 +12,8 @@ bạn. Không có server, không có phí hằng tháng.
   Đọc được cả mã "Export accounts" của Google Authenticator (thêm mọi tài khoản cùng lúc).
 - Nhập dữ liệu từ 1Password (file `.1pux`), gồm cả OTP, trường tuỳ chỉnh và file đính kèm.
 - Đồng bộ qua Google Drive, tự gộp khi hai thiết bị cùng sửa. Mất mạng vẫn xem và sửa được.
-- Cài như app trên Mac, Windows, iPhone (PWA). Trên Android có app riêng (APK) tự điền mật khẩu
-  và OTP vào mọi app và trình duyệt.
+- Có app riêng cho macOS, Windows, Linux và Android (APK, tự điền mật khẩu và OTP vào mọi app
+  và trình duyệt). iPhone cài bản web như một app (PWA).
 - Tạo mật khẩu, tìm kiếm, thư mục, nhãn, yêu thích, thùng rác, tự khoá.
 - File `.kdbx` mở được bằng KeePassXC, KeePassium, KeePassDX… nên bạn không bị khoá vào app này.
 
@@ -176,6 +176,51 @@ của Android, mở khoá bằng vân tay/khuôn mặt/mã PIN, và đăng nhậ
   thêm hai secret ở Settings → Secrets and variables → Actions:
   `ANDROID_KEYSTORE_B64` (nội dung `base64 -w0 kaipass-release.jks`) và `ANDROID_KEYSTORE_PASSWORD`.
 
+## App máy tính (macOS, Windows, Linux)
+
+Cùng giao diện với bản web, trong một cửa sổ riêng, cộng thêm những thứ trang web không làm được:
+
+- **Giữ đăng nhập Google.** Đăng nhập một lần qua trình duyệt của máy; sau đó app tự gia hạn, không
+  phải bấm "Đăng nhập Google" mỗi giờ như bản web.
+- **Khoá theo máy.** Máy tính khoá màn hình hoặc ngủ thì vault khoá ngay. Menu KaiPass → Khoá
+  (Ctrl/⌘+L).
+- **Quét mã QR đang hiện trên màn hình** (khi thêm mã OTP): app tự tránh sang một bên rồi tìm mã QR
+  trên mọi màn hình.
+- **Clipboard tự xoá** sau 30 giây, kể cả khi cửa sổ KaiPass không ở trên cùng.
+- **Touch ID** trên máy Mac (Cài đặt → Bảo mật). Windows và Linux chưa có mở khoá bằng vân tay.
+- Thu hẹp cửa sổ thì app chuyển sang bố cục gọn như trên điện thoại.
+
+Tự điền trên trình duyệt vẫn do **extension** đảm nhiệm; app máy tính và extension dùng chung vault
+qua Google Drive.
+
+### Cài
+
+Tải từ release "builds" trên GitHub:
+
+| Hệ điều hành | File | Lần đầu mở |
+| --- | --- | --- |
+| macOS (Apple silicon) | `KaiPass-…-mac-arm64.dmg` | App chưa có chữ ký Apple: mở xong bị chặn thì vào System Settings → Privacy & Security → **Open Anyway**. Hoặc chạy `xattr -dr com.apple.quarantine /Applications/KaiPass.app`. |
+| macOS (Intel) | `KaiPass-…-mac-x64.dmg` | Như trên. |
+| Windows | `KaiPass-…-win-x64.exe` | SmartScreen cảnh báo: **More info → Run anyway**. |
+| Linux | `KaiPass-…-linux-x86_64.AppImage` hoặc `…-amd64.deb` | AppImage: `chmod +x` rồi chạy. |
+
+App không tự cập nhật: muốn bản mới thì tải lại và cài đè (dữ liệu giữ nguyên).
+
+### Đăng nhập Google trên app máy tính
+
+Google không cho đăng nhập bên trong cửa sổ của app, nên app mở trình duyệt của máy. Cách này cần
+một OAuth client loại **Desktop app** (làm một lần, dùng cho mọi máy tính):
+
+1. Google Cloud Console (cùng project với Client ID web) → Credentials → Create credentials →
+   OAuth client ID → Application type **Desktop app** → Create → **Download JSON**.
+2. Trong KaiPass: Lưu trên Google Drive → **Chọn file JSON** → Đăng nhập Google.
+
+File JSON được lưu trong kho khoá của hệ điều hành (Keychain, DPAPI, GNOME Keyring/KWallet), cùng
+với refresh token. Client loại Desktop có "client secret", nhưng Google không coi nó là bí mật (nó
+nằm trong mọi app cài trên máy); dù vậy file này không nằm trong git. Nếu muốn bản build có sẵn
+client, thêm hai secret `GOOGLE_DESKTOP_CLIENT_ID` và `GOOGLE_DESKTOP_CLIENT_SECRET` cho GitHub
+Actions.
+
 ## Dán tin nhắn (Claude AI)
 
 **Thêm → Dán tin nhắn (Claude)…**: dán nguyên tin nhắn Slack/Zalo/email có thông tin tài khoản, có thể
@@ -310,6 +355,9 @@ KAIPASS_TEST_HOSTS=1 npm run build:ext && npm run e2e:ext   # extension trên Ch
 npm run build:android && npm run e2e:android                # giao diện bản Android, phần native giả lập
 cd android && ./gradlew testDebugUnitTest                   # phần Kotlin: OTP, nhận diện ô, khớp trang/app
 npm run apk        # APK (cần Android SDK; ký bằng KAIPASS_KEYSTORE + KAIPASS_KEYSTORE_PASSWORD)
+npm run desktop    # app máy tính cho hệ điều hành đang dùng → desktop/out/
+npm run build:desktop && (cd desktop && npm install && npm run prepare-app) && xvfb-run -a npm run e2e:desktop
+npm run build:android && node e2e/tour.cjs phone   # chụp mọi màn hình để duyệt giao diện (hoặc: desktop)
 ```
 
 Hai bộ `e2e` thay Google bằng bản giả lập, nên chúng kiểm tra logic đồng bộ và tự điền của app chứ
@@ -332,6 +380,8 @@ Mã nguồn chính:
 - `android/`: app Android (Kotlin): `WebHostActivity.kt` (mở web app, cầu nối native),
   `KaiPassAutofillService.kt` + `Classifier.kt` + `Matcher.kt` (tự điền), `Bio.kt` (vân tay),
   `GoogleAuth.kt` (Drive); phía web là `src/lib/android.ts` và `src/lib/androidIndex.ts`
+- `desktop/`: app máy tính (Electron): `main.cjs` (cửa sổ, cầu nối, khoá theo máy), `oauth.cjs`
+  (đăng nhập Google qua trình duyệt, PKCE), `preload.cjs`; phía web là `src/lib/desktop.ts`
 - `src/ext/`: phần riêng của extension: `background.ts` (service worker), `content.ts` (gợi ý trên
   trang), `fill.ts` (điền vào form)
 - `src/ui/`: giao diện

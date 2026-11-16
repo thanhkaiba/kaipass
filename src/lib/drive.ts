@@ -4,7 +4,8 @@
  */
 
 import { native } from './android';
-import { isAndroid, isExtension, memory } from './platform';
+import { desktop } from './desktop';
+import { isAndroid, isDesktop, isExtension, memory } from './platform';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const google: any;
@@ -41,8 +42,8 @@ let gis: Promise<void> | undefined;
 
 /** Loads Google's sign-in script. Call early so a later click can open the popup immediately. */
 export function preloadGoogle(): Promise<void> {
-  // The Android app signs in through Google Play services instead.
-  if (isAndroid) return Promise.resolve();
+  // The Android and desktop apps sign in outside the page (Google Play services, system browser).
+  if (isAndroid || isDesktop) return Promise.resolve();
   gis ??= new Promise<void>((resolve, reject) => {
     const s = document.createElement('script');
     s.src = GIS_URL;
@@ -82,6 +83,7 @@ export class Drive {
   async signIn(): Promise<void> {
     if (isExtension) return this.extensionSignIn(true);
     if (isAndroid) return this.androidSignIn(true);
+    if (isDesktop) return this.desktopSignIn(true);
     await preloadGoogle();
     const r = await new Promise<any>((resolve, reject) => {
       const client = google.accounts.oauth2.initTokenClient({
@@ -116,9 +118,10 @@ export class Drive {
    * returns false when the user has to sign in by hand.
    */
   async silent(): Promise<boolean> {
-    if (!isExtension && !isAndroid) return false;
+    if (!isExtension && !isAndroid && !isDesktop) return false;
     try {
-      if (isAndroid) await this.androidSignIn(false);
+      if (isDesktop) await this.desktopSignIn(false);
+      else if (isAndroid) await this.androidSignIn(false);
       else await this.extensionSignIn(false);
       return true;
     } catch {
@@ -129,6 +132,23 @@ export class Drive {
   /** Google Play services on the phone: picks the account and asks for Drive access once. */
   private async androidSignIn(interactive: boolean): Promise<void> {
     const r = await native<{ token: string; expiresIn: number }>('googleToken', { interactive });
+    await this.keep(r.token, r.expiresIn);
+  }
+
+  /**
+   * The desktop app opens the system browser once, then keeps a refresh token (encrypted by the
+   * operating system) and renews access quietly.
+   */
+  private async desktopSignIn(interactive: boolean): Promise<void> {
+    let r: { token: string; expiresIn: number };
+    try {
+      r = await desktop<{ token: string; expiresIn: number }>('googleToken', { interactive });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'need-client') {
+        throw new Error('Chưa có client Google cho app máy tính. Chọn file JSON của client "Desktop app" trước (Cài đặt → Dữ liệu).');
+      }
+      throw e;
+    }
     await this.keep(r.token, r.expiresIn);
   }
 

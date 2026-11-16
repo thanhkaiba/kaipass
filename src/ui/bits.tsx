@@ -12,7 +12,8 @@ import { defaultGen, generatePassword, type GenOptions } from '../lib/generator'
 import { parseOtp, secondsLeft, totp } from '../lib/totp';
 import { EMOJI, useIconPack } from './iconPack';
 import { native, saveFileAndroid } from '../lib/android';
-import { isAndroid } from '../lib/platform';
+import { desktop } from '../lib/desktop';
+import { isAndroid, isDesktop } from '../lib/platform';
 import { failedIcons, faviconUrls, inkOn, useBrand, useBrandPrefs, type Brand } from './brands';
 
 // ---- icons ----
@@ -275,6 +276,11 @@ export async function copyText(text: string, secret: boolean): Promise<void> {
   // Android marks secrets as sensitive (hidden from the clipboard preview) and clears them itself.
   if (isAndroid) {
     await native('copy', { text, sensitive: secret });
+    return;
+  }
+  // The desktop app clears it after 30 seconds even when its window is not in front.
+  if (isDesktop) {
+    await desktop('copy', { text, sensitive: secret });
     return;
   }
   await navigator.clipboard.writeText(text);

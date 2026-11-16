@@ -7,7 +7,8 @@
  * Without passing the device's check, the stored copy cannot be read.
  */
 import { androidInfo, native, NativeError } from './android';
-import { isAndroid } from './platform';
+import { desktop, DesktopError, desktopInfo } from './desktop';
+import { isAndroid, isDesktop } from './platform';
 import { kv } from './store';
 
 const KEY = 'bio';
@@ -28,6 +29,8 @@ export class BioUnavailable extends Error {}
 export async function bioSupported(): Promise<boolean> {
   try {
     if (isAndroid) return (await androidInfo()).bio.available;
+    // The desktop app has Touch ID on a Mac; its window cannot use passkeys.
+    if (isDesktop) return (await desktopInfo()).bio.available;
     return (
       typeof PublicKeyCredential !== 'undefined' &&
       (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
@@ -39,6 +42,7 @@ export async function bioSupported(): Promise<boolean> {
 
 export async function bioEnrolled(): Promise<boolean> {
   if (isAndroid) return (await androidInfo().catch(() => null))?.bio.enrolled ?? false;
+  if (isDesktop) return (await desktopInfo().catch(() => null))?.bio.enrolled ?? false;
   return !!(await kv.get<BioRecord>(KEY));
 }
 
@@ -76,6 +80,10 @@ async function prfFor(credentialId: Uint8Array, salt: Uint8Array): Promise<Array
 
 /** Sets up unlocking on this device. Shows the device's fingerprint / PIN prompt. */
 export async function enrollBio(masterPassword: string): Promise<void> {
+  if (isDesktop) {
+    await desktop('bioEnroll', { password: masterPassword });
+    return;
+  }
   // On Android the phone's keystore holds the key, unlocked by fingerprint, face or PIN.
   if (isAndroid) {
     await native('bioEnroll', { password: masterPassword });
@@ -120,6 +128,14 @@ export async function enrollBio(masterPassword: string): Promise<void> {
 
 /** Shows the device's prompt and returns the master password stored for this device. */
 export async function bioPassword(): Promise<string> {
+  if (isDesktop) {
+    try {
+      return (await desktop<{ password: string }>('bioUnlock')).password;
+    } catch (e) {
+      if (e instanceof DesktopError && e.message === 'Đã huỷ') throw new Error('Đã huỷ hoặc không xác thực được');
+      throw e;
+    }
+  }
   if (isAndroid) {
     try {
       return (await native<{ password: string }>('bioUnlock')).password;
@@ -143,5 +159,6 @@ export async function bioPassword(): Promise<string> {
 
 export async function disableBio(): Promise<void> {
   if (isAndroid) await native('bioDisable');
+  if (isDesktop) await desktop('bioDisable');
   await kv.del(KEY);
 }

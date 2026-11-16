@@ -1,7 +1,7 @@
 {
   "name": "kaipass",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,10 @@
     "e2e:ext": "node e2e/ext.cjs",
     "build:android": "tsc --noEmit && vite build --mode android",
     "apk": "npm run build:android && cd android && ./gradlew assembleRelease",
-    "e2e:android": "node e2e/android.cjs"
+    "e2e:android": "node e2e/android.cjs",
+    "build:desktop": "tsc --noEmit && vite build --mode desktop",
+    "desktop": "npm run build:desktop && cd desktop && npm install && npm run dist",
+    "e2e:desktop": "node e2e/desktop.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

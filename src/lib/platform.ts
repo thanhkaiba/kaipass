@@ -1,4 +1,5 @@
 export { isAndroid } from './android';
+export { isDesktop } from './desktop';
 
 /** True when running as the browser extension rather than as a web page. */
 export const isExtension = typeof chrome !== 'undefined' && !!chrome.runtime?.id;

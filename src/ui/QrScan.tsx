@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { captureTab, currentTab, type PageTab } from '../ext/browser';
-import { isAndroid, isPopup } from '../lib/platform';
+import { desktop } from '../lib/desktop';
+import { isAndroid, isDesktop, isPopup } from '../lib/platform';
 import type { QrResult } from '../lib/qr';
 
 const qrLib = () => import('../lib/qr');
@@ -119,6 +120,33 @@ export function QrScanDialog({
             <span>
               <strong>{busy === 'tab' ? 'Đang tìm…' : 'Quét trên trang đang mở'}</strong>
               <small>{tab.host}</small>
+            </span>
+          </button>
+        )}
+        {isDesktop && (
+          <button
+            type="button"
+            className="scan-option primary-option"
+            disabled={!!busy}
+            onClick={() =>
+              void run('screen', async () => {
+                // KaiPass steps aside for a moment and looks at every screen for a code.
+                const shots = await desktop<string[]>('captureScreens');
+                if (!shots.length) throw new Error('Không chụp được màn hình. Trên macOS, cho phép KaiPass ở System Settings → Privacy & Security → Screen Recording.');
+                const lib = await qrLib();
+                for (const url of shots) {
+                  const bytes = Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0));
+                  const text = await lib.readQrImage(new Blob([bytes], { type: 'image/png' }));
+                  if (text) return accept(text);
+                }
+                return accept(null);
+              })
+            }
+          >
+            <Icon name="device" />
+            <span>
+              <strong>{busy === 'screen' ? 'Đang tìm…' : 'Quét mã QR đang hiện trên màn hình'}</strong>
+              <small>Mở trang có mã QR ở cửa sổ khác trước</small>
             </span>
           </button>
         )}

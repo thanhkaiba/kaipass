@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 const stub = fileURLToPath(new URL('./src/lib/empty.ts', import.meta.url));
 
 // The page may only talk to Google's sign-in and Drive endpoints, and may only run its own code.
-// The Android app signs in through Google Play services, so it needs none of Google's web scripts.
+// The Android and desktop apps sign in outside the page, so they need none of Google's web scripts.
 const csp = (android: boolean) =>
   [
     "default-src 'self'",
@@ -25,12 +25,13 @@ const csp = (android: boolean) =>
 
 export default defineConfig(({ command, mode }) => ({
   base: './',
-  // `vite build --mode android`: the copy the Android app serves from its own files.
-  build: mode === 'android' ? { outDir: 'dist-android', emptyOutDir: true } : undefined,
+  // `vite build --mode android|desktop`: the copy those apps serve from their own files.
+  build: mode === 'android' || mode === 'desktop' ? { outDir: `dist-${mode}`, emptyOutDir: true } : undefined,
   plugins: [
     react(),
-    // The Android app ships its files inside the APK, so it needs no offline cache.
+    // The Android and desktop apps ship their files inside the app, so they need no offline cache.
     mode !== 'android' &&
+    mode !== 'desktop' &&
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'script',
@@ -59,7 +60,7 @@ export default defineConfig(({ command, mode }) => ({
       transformIndexHtml: (html: string) =>
         html.replace(
           '<!--CSP-->',
-          command === 'build' ? `<meta http-equiv="Content-Security-Policy" content="${csp(mode === 'android')}" />` : '',
+          command === 'build' ? `<meta http-equiv="Content-Security-Policy" content="${csp(mode === 'android' || mode === 'desktop')}" />` : '',
         ),
     },
   ],

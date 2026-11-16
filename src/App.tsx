@@ -3,6 +3,7 @@ import { forget, recall, remember, writeFillIndex } from './ext/browser';
 import { BUMP_KEY } from './ext/match';
 import { preloadGoogle } from './lib/drive';
 import { native } from './lib/android';
+import { onDesktop } from './lib/desktop';
 import { androidEntries } from './lib/androidIndex';
 import { isAndroid, isExtension, isPopup } from './lib/platform';
 import { autoLockMinutes } from './lib/prefs';
@@ -94,6 +95,13 @@ export default function App() {
     },
     [refresh],
   );
+
+  // Desktop app: the computer locked or went to sleep, or the user chose "Khoá" in the menu.
+  useEffect(() => {
+    if (phase.k !== 'open') return;
+    const { session } = phase;
+    return onDesktop('lock', () => lock(session));
+  }, [phase, lock]);
 
   if (SHARE_LINK) {
     return (

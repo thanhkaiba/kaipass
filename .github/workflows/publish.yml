@@ -90,6 +90,53 @@ jobs:
           gh release create builds "${files[@]}" \
             --target "${GITHUB_SHA}" \
             --title "Bản build mới nhất" \
-            --notes "Tự động tạo từ nhánh main. kaipass-extension.zip là extension cho Chrome/Edge: giải nén rồi nạp ở chrome://extensions (Load unpacked). kaipass.apk là app Android (nếu repo đã có khoá ký)."
+            --notes "Tự động tạo từ nhánh main. kaipass-extension.zip: extension cho Chrome/Edge (giải nén rồi nạp ở chrome://extensions, Load unpacked). kaipass.apk: app Android (nếu repo đã có khoá ký). KaiPass-*.dmg / .exe / .AppImage / .deb: app cho macOS, Windows, Linux (được thêm vào sau vài phút)."
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # The desktop app, built on each system for that system, then added to the same release.
+  desktop:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the web files for the desktop app
+        run: npm run build:desktop
+      - name: Install Electron
+        working-directory: desktop
+        run: npm ci
+
+      - name: Test the desktop app
+        if: runner.os == 'Linux'
+        run: |
+          (cd desktop && npm run prepare-app)
+          xvfb-run -a -s "-screen 0 1600x1000x24" npm run e2e:desktop
+
+      # Unsigned builds (no Apple or Windows certificates): macOS gets an ad-hoc signature so it
+      # runs on Apple silicon; both systems show a first-run warning, see the README.
+      - name: Package
+        working-directory: desktop
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Optional: a "Desktop app" OAuth client, so users need not pick its JSON file.
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+
+      - name: Add to the "builds" release
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(desktop/out/*.dmg desktop/out/*.exe desktop/out/*.AppImage desktop/out/*.deb)
+          gh release upload builds "${files[@]}" --clobber
         env:
           GH_TOKEN: ${{ github.token }}

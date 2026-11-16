@@ -1,0 +1,89 @@
+{
+  "name": "kaipass-desktop",
+  "productName": "KaiPass",
+  "version": "0.0.0",
+  "private": true,
+  "description": "KaiPass cho macOS, Windows và Linux",
+  "author": "KaiPass",
+  "homepage": "https://github.com/thanhkaiba/kaipass",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "prepare-app": "node prepare.cjs",
+    "dist": "node prepare.cjs --dist"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "io.github.thanhkaiba.kaipass",
+    "productName": "KaiPass",
+    "artifactName": "KaiPass-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "out",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "oauth.cjs",
+      "oauth.json",
+      "app/**"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSCameraUsageDescription": "KaiPass dùng camera để quét mã QR của mã OTP."
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "linux": {
+      "category": "Utility",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "maintainer": "KaiPass",
+      "synopsis": "Trình quản lý mật khẩu cá nhân",
+      "executableName": "kaipass"
+    },
+    "publish": []
+  }
+}

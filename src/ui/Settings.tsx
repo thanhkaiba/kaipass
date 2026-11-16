@@ -4,7 +4,8 @@ import { defaultInlinePrefs, INLINE_PREFS_KEY, type InlinePrefs } from '../ext/m
 import { bioEnrolled, bioSupported, disableBio, enrollBio } from '../lib/bio';
 import { Drive, preloadGoogle } from '../lib/drive';
 import { importOnePux, type ImportResult } from '../lib/onepux';
-import { isAndroid, isExtension, isPopup } from '../lib/platform';
+import { desktopInfo, type DesktopInfo } from '../lib/desktop';
+import { isAndroid, isDesktop, isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes, setAutoLockMinutes } from '../lib/prefs';
 import { recoveryEnabled, removeRecovery, resealRecovery, setUpRecovery } from '../lib/recovery';
 const kitLib = () => import('../lib/recoveryKit');
@@ -26,7 +27,7 @@ import {
 import { WipeSection } from './Forgot';
 import { LookSettings } from './Look';
 import { AndroidAutofillSettings } from './AndroidSettings';
-import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
+import { DesktopClientSetup, needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
 export type Tab = 'security' | 'data' | 'web' | 'autofill' | 'ai' | 'look' | 'device';
 
@@ -175,7 +176,7 @@ export function Settings({
     });
 
   const connectDrive = () => {
-    const id = clientId.trim();
+    const id = isDesktop ? 'desktop' : clientId.trim();
     if (!id) return setError('Cần nhập Google OAuth Client ID');
     void run('drive', async () => {
       const drive = new Drive(id);
@@ -313,7 +314,11 @@ export function Settings({
                       icon="finger"
                       on={bio}
                       title="Vân tay / mật khẩu máy"
-                      info="Mở khoá bằng Touch ID, Windows Hello, vân tay điện thoại hoặc PIN của máy. Chỉ áp dụng cho thiết bị này."
+                      info={
+                        isDesktop
+                          ? 'App máy tính: mở khoá bằng Touch ID trên máy Mac. Trên Windows và Linux, dùng bản web trong trình duyệt nếu cần Windows Hello.'
+                          : 'Mở khoá bằng Touch ID, Windows Hello, vân tay điện thoại hoặc PIN của máy. Chỉ áp dụng cho thiết bị này.'
+                      }
                       sub={bio ? 'Đang bật' : bioOk ? 'Tắt' : 'Thiết bị không hỗ trợ'}
                     >
                       {isPopup && !bio ? (
@@ -480,7 +485,8 @@ export function Settings({
                             <Icon name="cloud" /> {busy === 'drive' ? 'Đang kết nối…' : 'Chuyển lên Google Drive'}
                           </button>
                         </Setting>
-                        {(needsClientId || isExtension) && (
+                        {isDesktop && <DesktopClientSetup />}
+                        {(needsClientId || isExtension) && !isDesktop && (
                           <div className="setting-panel">
                             {needsClientId && (
                               <TextInput
@@ -609,6 +615,7 @@ export function Settings({
                   />
                 </div>
               )}
+              {tab === 'device' && isDesktop && <DesktopAbout />}
               {tab === 'device' && (
                 <WipeSection
                   mode={meta.mode}
@@ -656,6 +663,23 @@ export function Settings({
         />
       )}
     </div>
+  );
+}
+
+const PLATFORM_NAME: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
+
+/** Desktop app: which build this is, and whether it stays signed in to Google. */
+function DesktopAbout() {
+  const [info, setInfo] = useState<DesktopInfo | null>(null);
+  useEffect(() => {
+    void desktopInfo().then(setInfo, () => {});
+  }, []);
+  if (!info) return null;
+  return (
+    <p className="muted small">
+      KaiPass cho {PLATFORM_NAME[info.platform] ?? info.platform} {info.version}
+      {info.google.signedIn && ' · đang giữ đăng nhập Google trên máy này'}
+    </p>
   );
 }
 

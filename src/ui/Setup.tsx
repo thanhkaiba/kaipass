@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { GOOGLE_CLIENT_ID } from '../config';
 import { Drive, preloadGoogle } from '../lib/drive';
-import { isExtension } from '../lib/platform';
+import { desktop, desktopInfo } from '../lib/desktop';
+import { isDesktop, isExtension } from '../lib/platform';
 import { ForgotDialog } from './Forgot';
 import { FILE_NAME, Session } from '../lib/session';
 import { Vault } from '../lib/vault';
@@ -36,6 +37,68 @@ export function RedirectHint() {
   );
 }
 
+/**
+ * The desktop app signs in through the system browser, which needs a Google OAuth client of type
+ * "Desktop app". Unless the build came with one, the user picks the client's JSON file once; it is
+ * kept encrypted by the operating system.
+ */
+export function DesktopClientSetup({ onChange }: { onChange?: (ready: boolean) => void }) {
+  const [ready, setReady] = useState<boolean | null>(null);
+  const [error, setError] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!isDesktop) return;
+    void desktopInfo().then((i) => {
+      setReady(i.google.configured);
+      onChange?.(i.google.configured);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!isDesktop || ready !== false) return null;
+  return (
+    <div className="client-setup" data-testid="desktop-client-setup">
+      <strong>Làm một lần: cho KaiPass trên máy tính đăng nhập Google</strong>
+      <ol>
+        <li>
+          Google Cloud Console → Credentials → Create credentials → OAuth client ID → loại <strong>Desktop app</strong>
+        </li>
+        <li>
+          Bấm <strong>Download JSON</strong>, rồi chọn file đó ở đây
+        </li>
+      </ol>
+      <input
+        ref={input}
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        aria-label="File JSON của client Desktop"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (!f) return;
+          setError('');
+          try {
+            await desktop('googleConfigure', { file: await f.text() });
+            setReady(true);
+            onChange?.(true);
+          } catch (err) {
+            setError(errorText(err));
+          }
+        }}
+      />
+      <button type="button" onClick={() => input.current?.click()}>
+        <Icon name="upload" /> Chọn file JSON
+      </button>
+      {error && (
+        <p className="error" role="alert">
+          <Icon name="alert" />
+          <span>{error}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 type Step =
   | { k: 'choose' }
   | { k: 'local' }
@@ -59,6 +122,7 @@ export function Setup({
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [desktopReady, setDesktopReady] = useState(!isDesktop);
 
   useEffect(() => {
     if (step.k === 'drive' && !isExtension) preloadGoogle().catch(() => {});
@@ -100,7 +164,8 @@ export function Setup({
       if (!file) return setError('Chưa chọn file .kdbx');
       void run(async () => onReady(await Session.adoptLocal(await Vault.open(await file.arrayBuffer(), pw)), pw));
     } else if (step.k === 'drive') {
-      const id = clientId.trim();
+      // The desktop app has its own client (see DesktopClientSetup); the id here only labels the token.
+      const id = isDesktop ? 'desktop' : clientId.trim();
       if (!id) return setError('Cần nhập Google OAuth Client ID');
       void run(async () => {
         const drive = new Drive(id);
@@ -159,7 +224,7 @@ export function Setup({
             <p className="muted small">
               App chỉ thấy file do chính nó tạo <InfoTip text="KaiPass xin quyền drive.file: không đọc được file nào khác trong Drive của bạn." />
             </p>
-            {needsClientId && (
+            {needsClientId && !isDesktop && (
               <TextInput
                 label="Google OAuth Client ID"
                 hint="Tạo miễn phí trong Google Cloud Console, xem README."
@@ -170,7 +235,8 @@ export function Setup({
                 mono
               />
             )}
-            <button className="primary" disabled={busy}>
+            <DesktopClientSetup onChange={setDesktopReady} />
+            <button className="primary" disabled={busy || !desktopReady}>
               <Icon name="login" /> {busy ? 'Đang kết nối…' : 'Đăng nhập Google'}
             </button>
             <RedirectHint />

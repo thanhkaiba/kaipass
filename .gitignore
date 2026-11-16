@@ -5,3 +5,4 @@ dist-ext
 *.1pux
 .env*
 dist-android
+dist-desktop

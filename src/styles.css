@@ -3027,7 +3027,7 @@ body {
   }
 }
 
-.danger-zone summary {
+.danger-zone:not(.hint) summary {
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--border);
@@ -3035,6 +3035,30 @@ body {
   font-size: 14px;
 }
 
-.danger-zone[open] summary {
+.danger-zone:not(.hint)[open] summary {
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+/* Desktop app: the one-time Google client setup */
+.client-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.client-setup ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.client-setup strong {
+  color: var(--text);
 }
