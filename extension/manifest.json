@@ -40,6 +40,9 @@
     "identity",
     "alarms"
   ],
+  "optional_permissions": [
+    "privacy"
+  ],
   "host_permissions": [
     "https://www.googleapis.com/*"
   ],

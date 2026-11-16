@@ -2,7 +2,7 @@ import { forcedTabId, isExtension, isPopup, memory } from '../lib/platform';
 import { parseOtp, totp } from '../lib/totp';
 import type { Item } from '../lib/vault';
 import { fillPage, type FillResult } from './fill';
-import { FILL_INDEX_KEY, hostMatches, hostOf, UNLOCK_KEY, type FillEntry, type UnlockRecord } from './match';
+import { FILL_INDEX_KEY, hostMatches, hostOf, matchScore, UNLOCK_KEY, type FillEntry, type UnlockRecord } from './match';
 
 export { hostMatches, hostOf };
 
@@ -11,10 +11,15 @@ export interface PageTab {
   host: string;
 }
 
-export function matchesPage(item: Item, pageHost: string): boolean {
-  if (item.trashed) return false;
+/** How well an item fits a page (see matchScore); 0 when it should not be offered. */
+export function pageScore(item: Item, pageHost: string): number {
+  if (item.trashed) return 0;
   const urls = [item.url, ...item.fields.filter((f) => /^KP2A_URL/.test(f.name)).map((f) => f.value)];
-  return urls.some((u) => hostMatches(hostOf(u), pageHost));
+  return Math.max(0, ...urls.map((u) => matchScore(hostOf(u), pageHost)));
+}
+
+export function matchesPage(item: Item, pageHost: string): boolean {
+  return pageScore(item, pageHost) > 0;
 }
 
 /** The web page the popup was opened on, if it is one we can fill. */

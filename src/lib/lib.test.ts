@@ -5,6 +5,7 @@ import { importOnePux } from './onepux';
 import { normalizeOtp, parseOtp, totp } from './totp';
 import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from './share';
 import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongRecoveryKey } from './recovery';
+import { matchScore } from '../ext/match';
 import { Vault, WrongPasswordError } from './vault';
 
 const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
@@ -288,5 +289,32 @@ describe('recovery key', () => {
     const { record } = await createRecord('pw');
     await expect(recoverPassword(record, 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-FFFFF')).rejects.toBeInstanceOf(WrongRecoveryKey);
     expect(normalizeKey('ab-cd ef')).toBe('ABCDEF');
+  });
+});
+
+describe('address matching', () => {
+  const page = 'us-east-1.signin.aws.amazon.com';
+  it('offers logins from the same site, closest first', () => {
+    const exact = matchScore(page, page);
+    const otherRegion = matchScore('ap-southeast-2.signin.aws.amazon.com', page);
+    const account = matchScore('631670122302.signin.aws.amazon.com', page);
+    const console = matchScore('console.aws.amazon.com', page);
+    const parent = matchScore('amazon.com', page);
+    expect(exact).toBeGreaterThan(otherRegion);
+    expect(account).toBe(otherRegion);
+    expect(otherRegion).toBeGreaterThan(console);
+    expect(console).toBeGreaterThan(parent);
+    expect(parent).toBeGreaterThan(0);
+    // A login saved for a parent domain is still offered on its subdomains.
+    expect(matchScore('google.com', 'accounts.google.com')).toBeGreaterThan(0);
+  });
+
+  it('never crosses sites', () => {
+    expect(matchScore('amazon.com', 'amazon.com.evil.net')).toBe(0);
+    expect(matchScore('alice.github.io', 'evil.github.io')).toBe(0);
+    expect(matchScore('vietcombank.com.vn', 'other.com.vn')).toBe(0);
+    expect(matchScore('localhost', '127.0.0.1')).toBe(0);
+    expect(matchScore('a.localhost', 'b.localhost')).toBe(0);
+    expect(matchScore('', page)).toBe(0);
   });
 });

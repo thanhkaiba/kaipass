@@ -1,4 +1,5 @@
 /** Address matching shared by the popup and the background worker. No DOM or chrome.* use here. */
+import { getDomain } from 'tldts';
 
 /** Host name without "www.", or '' for anything that is not a web address. */
 export function hostOf(url: string): string {
@@ -12,12 +13,42 @@ export function hostOf(url: string): string {
 }
 
 /**
- * A saved address matches a page when the hosts are equal or one is a subdomain of the other,
- * so a login saved for example.com is offered on login.example.com but never on example.com.evil.net.
+ * The registrable domain ("site") of a host, using the Public Suffix List including its private
+ * section, so alice.github.io and evil.github.io are different sites while
+ * us-east-1.signin.aws.amazon.com and console.aws.amazon.com are both amazon.com.
+ * Undefined for IP addresses and names like localhost.
  */
+function siteOf(host: string): string | undefined {
+  return getDomain(host, { allowPrivateDomains: true }) ?? undefined;
+}
+
+function sharedLabels(a: string, b: string): number {
+  const x = a.split('.').reverse();
+  const y = b.split('.').reverse();
+  let n = 0;
+  while (n < x.length && n < y.length && x[n] === y[n]) n++;
+  return n;
+}
+
+/**
+ * How well a saved address fits the page, 0 meaning "do not offer it". The same host scores
+ * highest; otherwise addresses on the same site rank by how much of the name they share, so on
+ * us-east-1.signin.aws.amazon.com a login saved for ap-southeast-2.signin.aws.amazon.com ranks
+ * above one saved for console.aws.amazon.com, which ranks above one for amazon.com. A login is
+ * never offered on example.com.evil.net or on another github.io site.
+ */
+export function matchScore(saved: string, page: string): number {
+  if (!saved || !page) return 0;
+  if (saved === page) return 1000;
+  const shared = sharedLabels(saved, page);
+  const nested = page.endsWith(`.${saved}`) || saved.endsWith(`.${page}`);
+  const site = siteOf(page);
+  if (!nested && !(site && site === siteOf(saved))) return 0;
+  return shared * 10 + (nested ? 5 : 0);
+}
+
 export function hostMatches(saved: string, page: string): boolean {
-  if (!saved || !page) return false;
-  return saved === page || page.endsWith(`.${saved}`) || saved.endsWith(`.${page}`);
+  return matchScore(saved, page) > 0;
 }
 
 export const UNLOCK_KEY = 'kaipass.unlock';

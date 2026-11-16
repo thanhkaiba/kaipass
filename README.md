@@ -99,7 +99,14 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
 - **Từ thanh công cụ:** bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`),
   bấm **Điền** ở tài khoản muốn dùng.
 - Mã OTP được điền khi trang có ô nhập mã. Nếu ô đó ở bước sau, bấm vào ô và chọn tài khoản lần nữa.
-- Một tài khoản chỉ được gợi ý khi ô "Địa chỉ web" của nó trùng tên miền với trang đang mở.
+- Một tài khoản được gợi ý khi địa chỉ đã lưu cùng **site** với trang (ví dụ mọi trang
+  `*.amazon.com`), xếp địa chỉ giống nhất lên trước. "Site" theo Public Suffix List, nên
+  `ai-do.github.io` và `ke-xau.github.io` là hai site khác nhau, và không bao giờ gợi ý trên
+  `amazon.com.evil.net`.
+- Danh sách mật khẩu Chrome tự lưu là giao diện của trình duyệt, luôn nằm trên trang, và extension
+  không ẩn được nó. Danh sách KaiPass vì vậy mở phía trên ô nhập. Muốn Chrome thôi hiện, xoá các mật
+  khẩu đó trong `chrome://password-manager` (Cài đặt → Gợi ý trên web có nút mở), và tắt "Chrome hỏi
+  lưu mật khẩu" để chỉ KaiPass hỏi.
 - Khi KaiPass đang khoá, danh sách trong ô có nút **Mở khoá**.
 - Tắt biểu tượng hoặc thẻ gợi ý trong **Cài đặt → Gợi ý trên trang web**.
 

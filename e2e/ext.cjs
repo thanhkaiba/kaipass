@@ -73,6 +73,7 @@ const PAGES = {
   '/spa': `<div><input id="u" autocomplete="username"><input id="p" type="password"><button type="button" id="go">Sign in</button></div><p id="msg"></p>
     <script>document.getElementById('go').addEventListener('click', () => { document.getElementById('msg').textContent = 'Welcome'; });</script>`,
   '/welcome': `<h1>Welcome</h1>`,
+  '/low': `<form style="margin-top:420px"><input name="email" type="email" autocomplete="username"><input name="pass" type="password"></form>`,
   '/frame': `<p>Trang chứa khung của site khác</p><iframe src="http://127.0.0.1:${PORT}/login" width="400" height="200"></iframe>`,
 };
 
@@ -232,6 +233,14 @@ const PAGES = {
     await ui.locator('.panel .row').first().click();
     await site.waitForFunction(() => document.querySelector('[name=pass]').value !== '');
     check('chọn trong danh sách là điền vào form', (await site.locator('[name=pass]').inputValue()) === 's3cret-pw');
+
+    // The browser's own password list opens below a field, so ours opens above when it can.
+    await site.goto(`http://localhost:${PORT}/low`);
+    await site.locator('[name=email]').click();
+    await ui.locator('.panel .row').first().waitFor({ state: 'visible' });
+    const fieldBox = await site.locator('[name=email]').boundingBox();
+    const panelBox = await ui.locator('.panel').boundingBox();
+    check('danh sách KaiPass mở phía trên ô nhập (không bị danh sách của Chrome che)', panelBox.y + panelBox.height <= fieldBox.y, `${panelBox.y + panelBox.height} vs ${fieldBox.y}`);
 
     await site.goto(`http://localhost:${PORT}/otp`);
     await site.locator('[name=code]').click();

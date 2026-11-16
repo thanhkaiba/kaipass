@@ -100,6 +100,8 @@ export function Settings({
   const [newKey, setNewKey] = useState('');
   const [keptKey, setKeptKey] = useState(false);
   const [prompt, setPrompt] = useState<'bio' | 'recovery' | null>(null);
+  /** Whether Chrome's own password manager still offers to save passwords (undefined: unknown). */
+  const [chromeSaves, setChromeSaves] = useState<boolean | undefined>();
   const pux = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -107,6 +109,11 @@ export function Settings({
     void bioEnrolled().then(setBio);
     void recoveryEnabled().then(setHasRecovery);
     if (isExtension) {
+      void chrome.permissions.contains({ permissions: ['privacy'] }).then(async (has) => {
+        if (!has) return setChromeSaves(true);
+        const s = await chrome.privacy.services.passwordSavingEnabled.get({});
+        setChromeSaves(s.value !== false);
+      });
       void chrome.storage.local
         .get(INLINE_PREFS_KEY)
         .then((r) => setInline({ ...defaultInlinePrefs, ...(r[INLINE_PREFS_KEY] as Partial<InlinePrefs> | undefined) }));
@@ -194,6 +201,21 @@ export function Settings({
     if (!(await vault.checkPassword(pw))) throw new Error('Master password không đúng');
     return pw;
   };
+
+  /** Asks Chrome to stop offering to save passwords, so only KaiPass asks. */
+  const setChromeSaving = (offer: boolean) =>
+    run('chrome', async () => {
+      // Must be asked for from the click itself, before anything else is awaited.
+      const granted = await chrome.permissions.request({ permissions: ['privacy'] });
+      if (!granted) throw new Error('Cần cho phép quyền "privacy" để đổi cài đặt này của Chrome');
+      await chrome.privacy.services.passwordSavingEnabled.set({ value: offer });
+      const s = await chrome.privacy.services.passwordSavingEnabled.get({});
+      if (s.levelOfControl !== 'controlled_by_this_extension' && s.value !== offer) {
+        throw new Error('Cài đặt này đang bị chính sách của máy hoặc extension khác khoá');
+      }
+      setChromeSaves(s.value !== false);
+      toast(offer ? 'Chrome sẽ hỏi lưu mật khẩu như cũ' : 'Chrome sẽ không hỏi lưu mật khẩu nữa');
+    });
 
   const tabs: [Tab, string, string][] = [
     ['security', 'shield', 'Bảo mật'],
@@ -486,6 +508,26 @@ export function Settings({
                   </Setting>
                   <Setting icon="sparkle" title="Thẻ gợi ý góc trên" info="Hiện thẻ gợi ý tài khoản ở góc trên khi trang có ô đăng nhập.">
                     <Switch label="Thẻ gợi ý góc trên" checked={inline.toast} onChange={(v) => setInlinePref({ toast: v })} />
+                  </Setting>
+                  <Setting
+                    icon="login"
+                    title="Chrome hỏi lưu mật khẩu"
+                    info="Tắt để chỉ KaiPass hỏi lưu. Danh sách mật khẩu Chrome đã lưu vẫn hiện dưới ô nhập: extension không ẩn được nó. Muốn hết hẳn, xoá các mật khẩu đó trong trình quản lý mật khẩu của Chrome."
+                    sub={chromeSaves === false ? 'Đã tắt, chỉ KaiPass hỏi' : 'Đang bật'}
+                  >
+                    <Switch
+                      label="Chrome hỏi lưu mật khẩu"
+                      checked={chromeSaves !== false}
+                      disabled={chromeSaves === undefined || busy === 'chrome'}
+                      onChange={(v) => void setChromeSaving(v)}
+                    />
+                  </Setting>
+                  <Setting icon="key" title="Mật khẩu đã lưu trong Chrome" info="Mở trang mật khẩu của Chrome để xoá những mật khẩu đã có trong KaiPass, cho danh sách của Chrome thôi hiện dưới ô nhập. Lưu ý: mật khẩu đồng bộ với tài khoản Google sẽ bị xoá ở mọi máy.">
+                    <IconButton
+                      icon="external"
+                      label="Mở trang mật khẩu của Chrome"
+                      onClick={() => void chrome.tabs.create({ url: 'chrome://password-manager/passwords' })}
+                    />
                   </Setting>
                 </div>
               )}

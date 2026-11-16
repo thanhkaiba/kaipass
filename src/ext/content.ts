@@ -104,6 +104,9 @@ declare const __KAIPASS_TEST__: boolean;
   .action { margin: 4px 8px 6px; padding: 7px 12px; border: 0; border-radius: 8px; background: #2f6bff; color: #fff; font-weight: 600; }
   .x { margin-left: auto; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #5d667a; font-size: 18px; line-height: 1; }
   .x:hover { background: #eef1f6; }
+  .toast .list { max-height: 340px; overflow: auto; }
+  .more { width: 100%; margin-top: 4px; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: #2f6bff; font-weight: 600; }
+  .more:hover { background: #e9f0ff; }
   .who { margin: 0 4px 10px; padding: 8px 10px; border-radius: 8px; background: #eef1f6; }
   .who .user { font-size: 13px; }
   .buttons { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 4px 2px; }
@@ -184,10 +187,14 @@ declare const __KAIPASS_TEST__: boolean;
     badge.style.left = `${r.right - size - 6}px`;
     badge.style.top = `${r.top + (r.height - size) / 2}px`;
     if (panel.style.display === 'block') {
-      const below = r.bottom + 4;
-      const fits = below + panel.offsetHeight < innerHeight || r.top < panel.offsetHeight;
+      // The browser's own saved-password list always opens below the field and is drawn above
+      // the page, so ours goes above the field whenever there is room.
+      const above = r.top - panel.offsetHeight - 6;
+      const below = r.bottom + 6;
+      const top = above >= 4 ? above : below;
+      panel.dataset.side = above >= 4 ? 'above' : 'below';
       panel.style.left = `${Math.max(4, Math.min(r.left, innerWidth - panel.offsetWidth - 4))}px`;
-      panel.style.top = `${fits ? below : r.top - panel.offsetHeight - 4}px`;
+      panel.style.top = `${top}px`;
       panel.style.minWidth = `${Math.max(260, r.width)}px`;
     }
   };
@@ -275,14 +282,25 @@ declare const __KAIPASS_TEST__: boolean;
     onTrusted(close, () => (toast.style.display = 'none'));
     head.append(logo, title, close);
     toast.append(head);
-    for (const item of s.items.slice(0, 4)) {
-      toast.append(
+    const list = el('div', 'list');
+    const addRow = (item: SuggestItem) =>
+      list.append(
         itemRow(item, () => {
           const first = passwordFields()[0] ?? Array.from(document.querySelectorAll('input')).find((i) => roleOf(i));
           field = first ?? null;
           void fill(item.id);
         }),
       );
+    const SHOWN = 4;
+    s.items.slice(0, SHOWN).forEach(addRow);
+    toast.append(list);
+    if (s.items.length > SHOWN) {
+      const more = el('button', 'more', `Xem thêm ${s.items.length - SHOWN} tài khoản`);
+      onTrusted(more, () => {
+        s.items.slice(SHOWN).forEach(addRow);
+        more.remove();
+      });
+      toast.append(more);
     }
     mount();
     toast.style.display = 'block';

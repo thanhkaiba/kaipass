@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { currentTab, fillTab, matchesPage, openInTab, touch, type PageTab } from '../ext/browser';
+import { currentTab, fillTab, matchesPage, openInTab, pageScore, touch, type PageTab } from '../ext/browser';
 import { isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes } from '../lib/prefs';
 import type { Session, SyncStatus } from '../lib/session';
@@ -195,10 +195,14 @@ export function Main({
     toast('Đã lưu');
   };
 
-  const suggestions = useMemo(
-    () => (tab ? items.filter((i) => matchesPage(i, tab.host)) : []),
-    [items, tab],
-  );
+  const suggestions = useMemo(() => {
+    if (!tab) return [];
+    return items
+      .map((i) => ({ i, score: pageScore(i, tab.host) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.i.title.localeCompare(b.i.title, 'vi'))
+      .map((x) => x.i);
+  }, [items, tab]);
 
   const fill = async (item: Item) => {
     if (!tab) return;

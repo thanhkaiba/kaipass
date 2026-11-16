@@ -11,8 +11,8 @@ import { backgroundSync, saveLogin } from './worker-vault';
 import {
   defaultInlinePrefs,
   FILL_INDEX_KEY,
-  hostMatches,
   hostOf,
+  matchScore,
   INLINE_PREFS_KEY,
   NEVER_SAVE_KEY,
   PENDING_KEY,
@@ -42,9 +42,12 @@ async function unlocked(): Promise<UnlockRecord | undefined> {
 
 async function entriesFor(host: string): Promise<FillEntry[]> {
   const all = ((await chrome.storage.session.get(FILL_INDEX_KEY))[FILL_INDEX_KEY] ?? []) as FillEntry[];
-  return all
-    .filter((e) => e.hosts.some((h) => hostMatches(h, host)))
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const scored = all
+    .map((e) => ({ e, score: Math.max(0, ...e.hosts.map((h) => matchScore(h, host))) }))
+    .filter((x) => x.score > 0);
+  // Closest address first, then by name.
+  scored.sort((a, b) => b.score - a.score || a.e.title.localeCompare(b.e.title));
+  return scored.map((x) => x.e);
 }
 
 async function prefs(): Promise<InlinePrefs> {
