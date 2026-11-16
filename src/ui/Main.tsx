@@ -6,7 +6,7 @@ import { AndroidSave } from './AndroidSave';
 import { autoLockMinutes } from '../lib/prefs';
 import type { Session, SyncStatus } from '../lib/session';
 import type { Item, ItemDraft, ItemType } from '../lib/vault';
-import { Avatar, Brand, copyText, errorText, Icon, IconButton, useToast } from './bits';
+import { Avatar, Brand, copyText, errorText, Generator, Icon, IconButton, Modal, useNarrow, useToast } from './bits';
 import { ItemEditor } from './ItemEditor';
 import { ItemView } from './ItemView';
 import { pushRecovery } from '../lib/recovery';
@@ -87,7 +87,10 @@ export function Main({
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [pane, setPane] = useState<'nav' | 'list' | 'detail'>('list');
-  const [settings, setSettings] = useState<false | SettingsTab>(false);
+  /** `true` opens Settings without a section in mind (a phone then lists the sections). */
+  const [settings, setSettings] = useState<boolean | SettingsTab>(false);
+  const [generating, setGenerating] = useState(false);
+  const narrow = useNarrow();
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<PageTab | undefined>();
   const [importing, setImporting] = useState(false);
@@ -312,6 +315,48 @@ export function Main({
     </button>
   );
 
+  const addMenu = (
+      <div className="menu" role="menu">
+        <div className="menu-title">Thêm mới</div>
+        {TYPES.map((t) => (
+          <button type="button" role="menuitem" key={t} onClick={() => startNew(t)}>
+            <Icon name={t} /> {TYPE_LABEL[t]}
+          </button>
+        ))}
+        <hr />
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setAdding(false);
+            setPasting(true);
+          }}
+        >
+          <Icon name="sparkle" /> Dán tin nhắn (Claude)…
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setAdding(false);
+            setScanning(true);
+          }}
+        >
+          <Icon name="qr" /> Quét mã QR (OTP)…
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setAdding(false);
+            setImporting(true);
+          }}
+        >
+          <Icon name="link" /> Từ link chia sẻ…
+        </button>
+      </div>
+  );
+
   return (
     <div className={`app pane-${pane}`}>
       <nav className="sidebar" aria-label="Bộ lọc">
@@ -331,6 +376,11 @@ export function Main({
         {folders.map((f) => navItem({ k: 'folder', id: f.id }, 'folder', f.name, f.depth))}
         <div className="nav-gap" />
         {navItem({ k: 'trash' }, 'trash', 'Thùng rác')}
+        <div className="nav-title">Công cụ</div>
+        <button type="button" className="nav-item" onClick={() => setGenerating(true)}>
+          <Icon name="dice" />
+          <span className="grow">Tạo mật khẩu</span>
+        </button>
         <div className="grow" />
         <div className="side-foot">
           <button
@@ -349,7 +399,7 @@ export function Main({
             icon="settings"
             label="Cài đặt"
             onClick={() => {
-              setSettings('security');
+              setSettings(true);
               // On a phone, closing Settings should land on the list, not the side menu.
               setPane('list');
             }}
@@ -372,6 +422,7 @@ export function Main({
             />
           </div>
           {isPopup && <IconButton icon="external" label="Mở trong tab" onClick={openInTab} />}
+          <IconButton icon="lock" label="Khoá" className="only-narrow" onClick={() => onLock(session)} />
           <div className="menu-wrap">
             <button
               type="button"
@@ -383,46 +434,7 @@ export function Main({
             >
               <Icon name="plus" />
             </button>
-            {adding && (
-              <div className="menu" role="menu">
-                {TYPES.map((t) => (
-                  <button type="button" role="menuitem" key={t} onClick={() => startNew(t)}>
-                    <Icon name={t} /> {TYPE_LABEL[t]}
-                  </button>
-                ))}
-                <hr />
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setAdding(false);
-                    setPasting(true);
-                  }}
-                >
-                  <Icon name="sparkle" /> Dán tin nhắn (Claude)…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setAdding(false);
-                    setScanning(true);
-                  }}
-                >
-                  <Icon name="qr" /> Quét mã QR (OTP)…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setAdding(false);
-                    setImporting(true);
-                  }}
-                >
-                  <Icon name="link" /> Từ link chia sẻ…
-                </button>
-              </div>
-            )}
+            {adding && !narrow && addMenu}
           </div>
         </div>
 
@@ -512,6 +524,36 @@ export function Main({
         )}
       </section>
 
+      {adding && narrow && (
+        <>
+          <div className="menu-backdrop" onClick={() => setAdding(false)} />
+          {addMenu}
+        </>
+      )}
+
+      {/* Phones: the things used most, within thumb's reach. */}
+      <nav className="tabbar" aria-label="Điều hướng">
+        <button type="button" className={filter.k === 'all' ? 'on' : ''} onClick={() => pick({ k: 'all' })}>
+          <Icon name="all" />
+          <span>Tất cả</span>
+        </button>
+        <button type="button" className={filter.k === 'fav' ? 'on' : ''} onClick={() => pick({ k: 'fav' })}>
+          <Icon name="star" filled={filter.k === 'fav'} />
+          <span>Yêu thích</span>
+        </button>
+        <button type="button" className="tab-add" aria-label="Thêm" aria-expanded={adding} onClick={() => setAdding(!adding)}>
+          <Icon name="plus" />
+        </button>
+        <button type="button" onClick={() => setGenerating(true)}>
+          <Icon name="dice" />
+          <span>Tạo mật khẩu</span>
+        </button>
+        <button type="button" onClick={() => setSettings(true)}>
+          <Icon name="settings" />
+          <span>Cài đặt</span>
+        </button>
+      </nav>
+
       <main className="detail-pane">
         {draft ? (
           <ItemEditor
@@ -600,10 +642,31 @@ export function Main({
         />
       )}
 
+      {generating && (
+        <Modal title="Tạo mật khẩu" icon="dice" onClose={() => setGenerating(false)}>
+          <Generator
+            useLabel="Chép mật khẩu"
+            useIcon="copy"
+            onUse={(password) => {
+              void copyText(password, true).then(
+                () => toast('Đã chép mật khẩu · tự xoá sau ít phút'),
+                () => toast('Không chép được'),
+              );
+              setGenerating(false);
+            }}
+          />
+        </Modal>
+      )}
+
       {isAndroid && <AndroidSave session={session} />}
 
       {settings && (
-        <Settings session={session} initialTab={settings} onClose={() => setSettings(false)} onReplace={onReplace} />
+        <Settings
+          session={session}
+          initialTab={settings === true ? undefined : settings}
+          onClose={() => setSettings(false)}
+          onReplace={onReplace}
+        />
       )}
     </div>
   );

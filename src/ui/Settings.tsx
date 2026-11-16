@@ -20,6 +20,7 @@ import {
   PasswordPrompt,
   SecretInput,
   TextInput,
+  useNarrow,
   useToast,
 } from './bits';
 import { WipeSection } from './Forgot';
@@ -79,16 +80,21 @@ export function Settings({
   session,
   onClose,
   onReplace,
-  initialTab = 'security',
+  initialTab,
 }: {
   session: Session;
   onClose: () => void;
   onReplace: (s: Session) => void;
+  /** Open straight on this section; without it a phone shows the list of sections first. */
   initialTab?: Tab;
 }) {
   const toast = useToast();
   const { vault, meta } = session;
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'security');
+  // Phones show one thing at a time: the list of sections, then one section with a way back.
+  const narrow = useNarrow();
+  const [inMenu, setInMenu] = useState(initialTab === undefined);
+  const menu = narrow && inMenu;
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [imported, setImported] = useState<ImportResult | null>(null);
@@ -236,42 +242,58 @@ export function Settings({
       toast(offer ? 'Chrome sẽ hỏi lưu mật khẩu như cũ' : 'Chrome sẽ không hỏi lưu mật khẩu nữa');
     });
 
-  const tabs: [Tab, string, string][] = [
-    ['security', 'shield', 'Bảo mật'],
-    ['data', 'folder', 'Dữ liệu'],
-    ...(isExtension ? ([['web', 'puzzle', 'Gợi ý trên web']] as [Tab, string, string][]) : []),
-    ...(isAndroid ? ([['autofill', 'key', 'Tự điền']] as [Tab, string, string][]) : []),
-    ['ai', 'sparkle', 'Claude AI'],
-    ['look', 'image', 'Giao diện'],
-    ['device', 'device', 'Thiết bị'],
+  type TabDef = [id: Tab, icon: string, label: string, about: string];
+  const tabs: TabDef[] = [
+    ['security', 'shield', 'Bảo mật', 'Vân tay, khoá khôi phục, master password, tự khoá'],
+    ['data', 'folder', 'Dữ liệu', 'Google Drive, nhập từ 1Password, sao lưu'],
+    ...(isExtension ? ([['web', 'puzzle', 'Gợi ý trên web', 'Biểu tượng và thẻ gợi ý trên trang']] as TabDef[]) : []),
+    ...(isAndroid ? ([['autofill', 'key', 'Tự điền', 'Điền mật khẩu và OTP vào app, trình duyệt']] as TabDef[]) : []),
+    ['ai', 'sparkle', 'Claude AI', 'API key và mô hình'],
+    ['look', 'image', 'Giao diện', 'Logo trang web, bộ icon, màu'],
+    ['device', 'device', 'Thiết bị', 'Xoá dữ liệu trên thiết bị này'],
   ];
+  const sectionLabel = tabs.find((t) => t[0] === tab)?.[2] ?? 'Cài đặt';
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal settings-modal" role="dialog" aria-modal="true" aria-label="Cài đặt">
+      <div className="modal full settings-modal" role="dialog" aria-modal="true" aria-label="Cài đặt">
         <header>
-          <span className="modal-icon">
-            <Icon name="settings" />
-          </span>
-          <h2>Cài đặt</h2>
+          {narrow && !inMenu ? (
+            <IconButton icon="back" label="Quay lại Cài đặt" onClick={() => setInMenu(true)} />
+          ) : (
+            <span className="modal-icon">
+              <Icon name="settings" />
+            </span>
+          )}
+          <h2>{narrow && !inMenu ? sectionLabel : 'Cài đặt'}</h2>
           <IconButton icon="x" label="Đóng" onClick={onClose} />
         </header>
         <div className="modal-body">
-          <div className="settings">
+          <div className={`settings ${menu ? 'at-menu' : 'at-section'}`}>
             <nav className="settings-tabs" aria-label="Mục cài đặt">
-              {tabs.map(([id, icon, label]) => (
+              {tabs.map(([id, icon, label, about]) => (
                 <button
                   type="button"
                   key={id}
                   className={`nav-item${tab === id ? ' active' : ''}`}
                   aria-current={tab === id}
+                  aria-label={label}
                   onClick={() => {
                     setTab(id);
+                    setInMenu(false);
                     setError('');
                   }}
                 >
-                  <Icon name={icon} />
-                  <span className="grow">{label}</span>
+                  <span className="nav-icon">
+                    <Icon name={icon} />
+                  </span>
+                  <span className="grow nav-text">
+                    <span>{label}</span>
+                    <small>{about}</small>
+                  </span>
+                  <span className="nav-chevron">
+                    <Icon name="arrow" />
+                  </span>
                 </button>
               ))}
             </nav>
@@ -573,6 +595,20 @@ export function Settings({
 
               {tab === 'look' && <LookSettings session={session} onOpenAi={() => setTab('ai')} />}
 
+              {tab === 'device' && (
+                <div className="group">
+                  <Setting
+                    icon={meta.mode === 'drive' ? 'cloud' : 'device'}
+                    on={meta.mode === 'drive'}
+                    title="Vault trên thiết bị này"
+                    sub={
+                      meta.mode === 'drive'
+                        ? 'Bản sao đã mã hoá của vault trên Google Drive, dùng được khi mất mạng'
+                        : 'Chỉ lưu trên thiết bị này, đã mã hoá, không đồng bộ'
+                    }
+                  />
+                </div>
+              )}
               {tab === 'device' && (
                 <WipeSection
                   mode={meta.mode}

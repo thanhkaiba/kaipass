@@ -150,6 +150,19 @@ export function InfoTip({ text }: { text: string }) {
   );
 }
 
+/** True on phones and narrow windows, where the app shows one pane at a time (see styles.css). */
+export function useNarrow(): boolean {
+  const query = '(max-width: 860px)';
+  const [narrow, setNarrow] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(query).matches);
+  useEffect(() => {
+    const m = matchMedia(query);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 // ---- tooltips ----
 
 /**
@@ -184,16 +197,22 @@ function TooltipLayer() {
       const el = (e.target as Element | null)?.closest?.('[data-tip]');
       if (el && (e.target as Element).matches(':focus-visible')) show(el);
     };
+    // Touch screens have no hover: tapping an ⓘ shows its text, tapping anywhere else hides it.
+    const down = (e: PointerEvent) => {
+      const info = e.pointerType === 'touch' ? (e.target as Element | null)?.closest?.('.infotip') : null;
+      if (info && info !== current.current) show(info);
+      else hide();
+    };
     document.addEventListener('pointerover', over);
     document.addEventListener('focusin', focus);
     document.addEventListener('focusout', hide);
-    document.addEventListener('pointerdown', hide);
+    document.addEventListener('pointerdown', down);
     window.addEventListener('scroll', hide, true);
     return () => {
       document.removeEventListener('pointerover', over);
       document.removeEventListener('focusin', focus);
       document.removeEventListener('focusout', hide);
-      document.removeEventListener('pointerdown', hide);
+      document.removeEventListener('pointerdown', down);
       window.removeEventListener('scroll', hide, true);
     };
   }, []);
@@ -299,12 +318,15 @@ export function Modal({
   onClose,
   children,
   wide,
+  full,
 }: {
   title: string;
   icon?: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  /** On a phone, take the whole screen instead of sliding up as a sheet. */
+  full?: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -313,7 +335,7 @@ export function Modal({
   }, [onClose]);
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal${wide ? ' wide' : ''}${full ? ' full' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header>
           {icon && (
             <span className="modal-icon">
@@ -572,7 +594,7 @@ export function OtpCode({ uri }: { uri: string }) {
 
 // ---- generator ----
 
-export function Generator({ onUse }: { onUse: (password: string) => void }) {
+export function Generator({ onUse, useLabel = 'Dùng mật khẩu này', useIcon = 'check' }: { onUse: (password: string) => void; useLabel?: string; useIcon?: string }) {
   const [opts, setOpts] = useState<GenOptions>(defaultGen);
   const [value, setValue] = useState(() => generatePassword(defaultGen));
   const update = (patch: Partial<GenOptions>) => {
@@ -624,7 +646,7 @@ export function Generator({ onUse }: { onUse: (password: string) => void }) {
         </div>
       </div>
       <button type="button" className="primary" onClick={() => onUse(value)}>
-        <Icon name="check" /> Dùng mật khẩu này
+        <Icon name={useIcon} /> {useLabel}
       </button>
     </div>
   );

@@ -6,6 +6,7 @@ const { spawn } = require('node:child_process');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 const { fakeDrive } = require('./fake-drive.cjs');
+const { fakeNative, BRIDGE } = require('./fake-native.cjs');
 
 const PORT = 4175;
 const URL_ = `http://localhost:${PORT}/`;
@@ -17,81 +18,6 @@ function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : `  (${detail})`}`);
   if (!ok) failures++;
 }
-
-/** Stands in for WebHostActivity.kt. State lives here, so it survives page reloads. */
-function fakeNative() {
-  const n = {
-    calls: [],
-    index: null,
-    indexClears: 0,
-    bio: null,
-    bioFails: false,
-    autofill: false,
-    copies: [],
-    files: [],
-    pendingSave: null,
-    saveDone: [],
-  };
-  n.handle = (method, args) => {
-    n.calls.push(method);
-    const info = () => ({ platform: 'android', version: '0.1.0', sdk: 35, package: 'io.github.thanhkaiba.kaipass', sha1: 'DC:A5:E3:99', autofill: { supported: true, enabled: n.autofill }, bio: { available: true, enrolled: !!n.bio } });
-    switch (method) {
-      case 'hello':
-      case 'info':
-        return info();
-      case 'googleToken':
-        return { token: 'fake-token', expiresIn: 3300 };
-      case 'bioEnroll':
-        n.bio = args.password;
-        return true;
-      case 'bioUnlock':
-        if (!n.bio || n.bioFails) throw new Error('Đã huỷ');
-        return { password: n.bio };
-      case 'bioDisable':
-        n.bio = null;
-        return true;
-      case 'copy':
-        n.copies.push(args);
-        return true;
-      case 'saveFile':
-        n.files.push(args);
-        return { saved: true };
-      case 'setFillIndex':
-        n.index = args;
-        return true;
-      case 'clearFillIndex':
-        n.index = null;
-        n.indexClears++;
-        return true;
-      case 'touch':
-        return true;
-      case 'openAutofillSettings':
-        n.autofill = true;
-        return true;
-      case 'pendingSave':
-        return n.pendingSave;
-      case 'saveDone':
-        n.saveDone.push(args);
-        n.pendingSave = null;
-        return true;
-      default:
-        throw new Error(`Không hỗ trợ: ${method}`);
-    }
-  };
-  return n;
-}
-
-// Mirrors what addWebMessageListener injects: an object with postMessage() and onmessage.
-const BRIDGE = `
-window.KaiPassNative = {
-  onmessage: null,
-  postMessage(raw) {
-    const { id } = JSON.parse(raw);
-    window.__nativeCall(raw).then((res) => this.onmessage && this.onmessage({ data: JSON.stringify({ id, ...res }) }));
-  },
-};
-window.__emit = (event, data) => window.KaiPassNative.onmessage({ data: JSON.stringify({ event, data: data || {} }) });
-`;
 
 async function addLogin(page, title, extra = {}) {
   await page.getByRole('button', { name: 'Thêm', exact: true }).click();
@@ -109,11 +35,11 @@ async function addLogin(page, title, extra = {}) {
   await page.getByRole('button', { name: 'Quay lại danh sách' }).click();
 }
 
-/** Settings sit in the side menu on a phone. */
+/** On a phone, Settings is in the bottom bar and opens on its list of sections. */
 async function openSettings(page) {
-  await page.getByRole('button', { name: 'Mở bộ lọc' }).click();
-  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('navigation', { name: 'Điều hướng' }).getByRole('button', { name: 'Cài đặt' }).click();
 }
+const backToSections = (page) => page.getByRole('button', { name: 'Quay lại Cài đặt' }).click();
 
 const waitStatus = (page, s) => page.getByTestId('sync-status').and(page.locator(`[data-status="${s}"]`)).waitFor({ state: 'attached', timeout: 20000 });
 const until = async (page, fn, what) => {
@@ -171,6 +97,24 @@ async function run(browser) {
   check('Android: địa chỉ androidapp:// thành app', sp.apps.join() === 'com.shopee.vn' && sp.hosts.length === 0);
   check('Android: theo thời gian tự khoá', n.index.lockMinutes === 10);
 
+  // ---- the keyboard opening must not push the screen's top out of view ----
+  await page.locator('.item', { hasText: 'GitHub' }).click();
+  await page.getByRole('button', { name: 'Sửa' }).click();
+  await page.getByLabel('Nhãn').focus();
+  await page.setViewportSize({ width: 412, height: 460 });
+  await page.waitForTimeout(500);
+  const fit = await page.evaluate(() => ({
+    pageScroll: document.scrollingElement.scrollTop,
+    extra: document.scrollingElement.scrollHeight - innerHeight,
+    head: Math.round(document.querySelector('.editor .detail-head').getBoundingClientRect().top),
+    field: document.activeElement.getBoundingClientRect(),
+  }));
+  check('Android: mở bàn phím không đẩy giao diện ra khỏi màn hình', fit.pageScroll === 0 && fit.extra === 0, JSON.stringify(fit));
+  check('Android: khi gõ vẫn thấy Huỷ/Lưu và ô đang nhập', fit.head === 0 && fit.field.top > 40 && fit.field.bottom < 460, JSON.stringify(fit));
+  await page.setViewportSize({ width: 412, height: 860 });
+  await page.getByRole('button', { name: 'Huỷ' }).click();
+  await page.getByRole('button', { name: 'Quay lại danh sách' }).click();
+
   // ---- clipboard goes through the app (sensitive, cleared by Android) ----
   await page.locator('.item', { hasText: 'GitHub' }).click();
   await page.getByRole('button', { name: 'Copy Mật khẩu' }).click();
@@ -190,6 +134,7 @@ async function run(browser) {
   check('Android: mở cài đặt tự điền của máy, quay lại thì cập nhật', n.calls.includes('openAutofillSettings'));
 
   // ---- fingerprint through the phone's keystore ----
+  await backToSections(page);
   await page.getByRole('button', { name: 'Bảo mật', exact: true }).click();
   await page.getByRole('switch', { name: 'Vân tay / mật khẩu máy' }).click();
   await page.getByLabel('Xác nhận master password').fill(PW);
@@ -198,9 +143,9 @@ async function run(browser) {
   check('Android: bật vân tay lưu master password qua keystore của máy', n.bio === PW);
   await page.getByRole('dialog', { name: 'Cài đặt' }).getByRole('button', { name: 'Đóng' }).click();
 
-  await page.getByRole('button', { name: 'Mở bộ lọc' }).click();
   await page.getByRole('button', { name: 'Khoá' }).click();
   // The lock screen asks for the fingerprint by itself; the fake passes.
+  await until(page, () => n.indexClears >= 1 && n.calls.includes('bioUnlock'), 'khoá rồi hỏi vân tay');
   await waitStatus(page, 'synced');
   check('Android: khoá thì xoá danh sách tự điền', n.indexClears >= 1);
   check('Android: màn hình khoá tự hỏi vân tay và mở', n.calls.filter((c) => c === 'bioUnlock').length >= 1);

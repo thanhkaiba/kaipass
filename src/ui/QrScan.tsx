@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { captureTab, currentTab, type PageTab } from '../ext/browser';
-import { isPopup } from '../lib/platform';
+import { isAndroid, isPopup } from '../lib/platform';
 import type { QrResult } from '../lib/qr';
 
 const qrLib = () => import('../lib/qr');
@@ -22,6 +22,7 @@ export function QrScanDialog({
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [hasCamera, setHasCamera] = useState(false);
+  const touch = isAndroid || (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches);
   const [cameraOn, setCameraOn] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -121,6 +122,7 @@ export function QrScanDialog({
             </span>
           </button>
         )}
+        {/* Pasting and dragging are for a keyboard and mouse; a phone picks or takes a photo. */}
         <div
           className="paste-zone"
           tabIndex={0}
@@ -152,12 +154,12 @@ export function QrScanDialog({
                   e.target.value = '';
                 }}
               />
-              <button type="button" onClick={() => file.current?.click()} disabled={!!busy}>
-                <Icon name="upload" /> Chọn ảnh
+              <button type="button" className={touch ? 'primary' : ''} onClick={() => file.current?.click()} disabled={!!busy}>
+                <Icon name={touch ? 'camera' : 'upload'} /> {touch ? 'Chụp hoặc chọn ảnh có mã QR' : 'Chọn ảnh'}
               </button>
             </>
           )}
-          {hasCamera && (
+          {hasCamera && !isAndroid && (
             <button type="button" onClick={() => setCameraOn(!cameraOn)} aria-pressed={cameraOn}>
               <Icon name="camera" /> {cameraOn ? 'Tắt camera' : 'Camera'}
             </button>

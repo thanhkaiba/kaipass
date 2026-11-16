@@ -70,10 +70,10 @@ export function ItemEditor({
             pressed={d.favorite}
             onClick={() => set({ favorite: !d.favorite })}
           />
-          <button type="button" onClick={onCancel} disabled={busy}>
+          <button type="button" className="cancel" onClick={onCancel} disabled={busy}>
             Huỷ
           </button>
-          <button className="primary" disabled={busy}>
+          <button className="primary save" disabled={busy}>
             <Icon name="check" /> {busy ? 'Đang lưu…' : 'Lưu'}
           </button>
         </div>
@@ -130,18 +130,26 @@ export function ItemEditor({
         </div>
         {d.fields.length === 0 && <p className="muted small">Ví dụ: câu hỏi bảo mật, mã PIN, số tài khoản…</p>}
         {d.fields.map((f, i) => (
-          <div className="custom-row" key={i}>
-            <input aria-label="Tên trường" placeholder="Tên trường" value={f.name} onChange={(e) => setField(i, { name: e.target.value })} />
-            <input
-              aria-label={`Giá trị ${f.name}`}
-              placeholder="Giá trị"
-              type={f.secret ? 'password' : 'text'}
-              className="mono"
-              autoComplete="off"
-              spellCheck={false}
-              value={f.value}
-              onChange={(e) => setField(i, { value: e.target.value })}
-            />
+          <div className="custom-field" key={i}>
+            <div className="custom-main">
+              <input
+                className="custom-name"
+                aria-label="Tên trường"
+                placeholder="Tên trường"
+                value={f.name}
+                onChange={(e) => setField(i, { name: e.target.value })}
+              />
+              <input
+                aria-label={`Giá trị ${f.name}`}
+                placeholder="Giá trị"
+                type={f.secret ? 'password' : 'text'}
+                className="custom-value mono"
+                autoComplete="off"
+                spellCheck={false}
+                value={f.value}
+                onChange={(e) => setField(i, { value: e.target.value })}
+              />
+            </div>
             <IconButton
               icon={f.secret ? 'eyeOff' : 'eye'}
               label="Ẩn giá trị"
