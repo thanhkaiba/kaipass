@@ -326,6 +326,18 @@ export class Vault {
     for (const g of [...bin.groups]) this.db.move(g, null);
   }
 
+  // ---- settings kept inside the encrypted file (synced with the vault) ----
+
+  getSetting(key: string): string {
+    return this.db.meta.customData.get(`kaipass.${key}`)?.value ?? '';
+  }
+
+  setSetting(key: string, value: string): void {
+    const k = `kaipass.${key}`;
+    if (value) this.db.meta.customData.set(k, { value, lastModified: new Date() });
+    else this.db.meta.customData.delete(k);
+  }
+
   // ---- attachments ----
 
   async addAttachment(id: string, fileName: string, data: ArrayBuffer): Promise<void> {

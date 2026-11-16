@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { defaultGen, generatePassword, type GenOptions } from '../lib/generator';
 import { parseOtp, secondsLeft, totp } from '../lib/totp';
+import { EMOJI, useIconPack } from './iconPack';
 
 // ---- icons ----
 
@@ -62,6 +63,20 @@ const PATHS: Record<string, string> = {
 };
 
 export function Icon({ name, filled, size }: { name: string; filled?: boolean; size?: number }) {
+  const pack = useIconPack();
+  const style = size ? { width: size, height: size, fontSize: size * 0.9 } : undefined;
+  if (pack.id === 'emoji' && EMOJI[name]) {
+    return (
+      <span className="icon icon-emoji" aria-hidden="true" style={style}>
+        {EMOJI[name]}
+      </span>
+    );
+  }
+  const raw = pack.icons?.[name];
+  if (raw) {
+    // Markup from the icon packages bundled with the app, never from user data.
+    return <span className={`icon icon-raw${filled ? ' filled' : ''}`} aria-hidden="true" style={style} dangerouslySetInnerHTML={{ __html: raw }} />;
+  }
   return (
     <svg
       className="icon"
@@ -78,6 +93,11 @@ export function Icon({ name, filled, size }: { name: string; filled?: boolean; s
       <path d={PATHS[name]} />
     </svg>
   );
+}
+
+/** The built-in drawing of an icon as SVG markup (used to preview it while another pack is on). */
+export function defaultIconSvg(name: string): string {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${PATHS[name] ?? ''}"/></svg>`;
 }
 
 /** An icon-only button. Its label is announced to screen readers and shown as a tooltip. */

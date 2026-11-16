@@ -10,6 +10,7 @@ import { ItemView } from './ItemView';
 import { pushRecovery } from '../lib/recovery';
 import { cleanupExpiredShares, sharedToDraft, takeIncoming } from '../lib/share';
 import type { OtpAccount } from '../lib/qr';
+import { AiPasteDialog } from './AiPaste';
 import { QrScanDialog } from './QrScan';
 import { Settings } from './Settings';
 import { ImportShareDialog } from './Share';
@@ -87,6 +88,7 @@ export function Main({
   const [tab, setTab] = useState<PageTab | undefined>();
   const [importing, setImporting] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [pasting, setPasting] = useState(false);
 
   // An item someone shared, brought over from the link page ("Lưu vào KaiPass").
   useEffect(() => {
@@ -378,6 +380,16 @@ export function Main({
                   role="menuitem"
                   onClick={() => {
                     setAdding(false);
+                    setPasting(true);
+                  }}
+                >
+                  <Icon name="sparkle" /> Dán tin nhắn (Claude)…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setAdding(false);
                     setScanning(true);
                   }}
                 >
@@ -517,6 +529,26 @@ export function Main({
           </div>
         )}
       </main>
+
+      {pasting && (
+        <AiPasteDialog
+          vault={vault}
+          onClose={() => setPasting(false)}
+          onSaveKey={(key) => change(() => vault.setSetting('anthropicKey', key))}
+          onEdit={(d) => {
+            setPasting(false);
+            setDraft({ ...d, folderId: filter.k === 'folder' ? filter.id : '' });
+            setPane('detail');
+          }}
+          onAddAll={async (drafts) => {
+            await change(() => {
+              for (const d of drafts) vault.upsert({ ...d, folderId: filter.k === 'folder' ? filter.id : '' });
+            });
+            setPasting(false);
+            toast(`Đã thêm ${drafts.length} mục`);
+          }}
+        />
+      )}
 
       {scanning && (
         <QrScanDialog

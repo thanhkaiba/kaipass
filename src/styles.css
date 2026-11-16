@@ -2319,3 +2319,152 @@ kbd {
   border-radius: 12px;
   background: #000;
 }
+
+/* ==== Claude paste ==== */
+
+.ai-row {
+  gap: 10px;
+}
+
+.ai-row .row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-thumbs {
+  padding: 0;
+}
+
+.thumb {
+  position: relative;
+}
+
+.thumb-x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+}
+
+/* ==== icon packs and accent colours ==== */
+
+.icon-raw {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.icon-raw svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.icon-raw.filled svg[fill='none'] {
+  fill: currentColor;
+}
+
+.icon-emoji {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.choice-icon .icon-emoji,
+.empty-icon .icon-emoji {
+  font-size: 22px;
+}
+
+.packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.pack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  text-align: left;
+  white-space: normal;
+  border-radius: 14px;
+}
+
+.pack[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.pack-icons {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.pack-icons .icon,
+.pack-icons .icon-raw,
+.pack-icons .icon-emoji {
+  width: 22px;
+  height: 22px;
+  font-size: 18px;
+}
+
+.pack-name {
+  display: flex;
+  flex-direction: column;
+}
+
+.pack-name small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.swatch {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 35%);
+}
+
+.swatch[aria-pressed='true'] {
+  border-color: var(--text);
+}
+
+:root[data-accent='violet'] { --accent: #7c4dff; --accent-hover: #6a3cf0; --accent-soft: #f1ecff; }
+:root[data-accent='pink'] { --accent: #e8458b; --accent-hover: #d53578; --accent-soft: #fdebf3; }
+:root[data-accent='green'] { --accent: #12a150; --accent-hover: #0d8a44; --accent-soft: #e6f6ec; }
+:root[data-accent='orange'] { --accent: #f06a1d; --accent-hover: #db5a10; --accent-soft: #fef0e7; }
+:root[data-accent='teal'] { --accent: #0e9fa8; --accent-hover: #0b8890; --accent-soft: #e3f6f7; }
+
+@media (prefers-color-scheme: dark) {
+  :root[data-accent='violet'] { --accent: #9b7bff; --accent-hover: #b39bff; --accent-soft: #261c47; }
+  :root[data-accent='pink'] { --accent: #ff6fa8; --accent-hover: #ff8fbc; --accent-soft: #3d1a2b; }
+  :root[data-accent='green'] { --accent: #3fd17f; --accent-hover: #62dc97; --accent-soft: #12301f; }
+  :root[data-accent='orange'] { --accent: #ff8a4c; --accent-hover: #ffa270; --accent-soft: #3b2214; }
+  :root[data-accent='teal'] { --accent: #35c9d1; --accent-hover: #5ad5db; --accent-soft: #0f2f31; }
+}

@@ -129,6 +129,27 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
   máy bạn và master password đang giữ trong bộ nhớ tạm. Cửa sổ KaiPass đang mở sẽ tự thấy thay đổi.
 - Extension và web app là hai bản cài riêng, cùng đồng bộ với một file trên Drive.
 
+## Dán tin nhắn (Claude AI)
+
+**Thêm → Dán tin nhắn (Claude)…**: dán nguyên tin nhắn Slack/Zalo/email có thông tin tài khoản, có thể
+kèm ảnh chụp màn hình (Ctrl/⌘+V). Claude tách thành tên, tên đăng nhập, mật khẩu, OTP, địa chỉ web và
+các trường khác. Một tài khoản thì mở sẵn trình sửa để bạn xem lại; nhiều tài khoản thì hiện danh sách
+để chọn. Không có gì được lưu khi bạn chưa xem.
+
+- Cần Claude API key (console.anthropic.com → API Keys). Nhập lần đầu khi dùng, hoặc ở **Cài đặt →
+  Claude AI**. Key được kiểm tra trước, rồi lưu **trong vault** (đã mã hoá) và đồng bộ cùng vault.
+- Mô hình mặc định Claude Opus 5.5; đổi sang Sonnet 5.5 hoặc Haiku 5.5 (rẻ hơn) trong Cài đặt.
+- Với Opus và Sonnet, yêu cầu bật dự phòng phía máy chủ (`fallbacks: "default"`): nếu mô hình từ chối
+  nhầm một tin nhắn chứa mật khẩu, API tự chạy lại trên mô hình dự phòng.
+- **Chỉ nội dung bạn dán** được gửi tới Anthropic, và chỉ khi bạn bấm nút. Vault không bao giờ được gửi.
+  Gọi thẳng từ thiết bị tới `api.anthropic.com`, không qua máy chủ nào khác.
+
+## Giao diện
+
+**Cài đặt → Giao diện**: chọn bộ icon (KaiPass, Lucide, Phosphor, Phosphor Duotone, Phosphor Fill,
+Pixel, Emoji) và màu chủ đạo. Lựa chọn lưu theo từng thiết bị. Các bộ icon là mã nguồn mở, xem
+`THIRD-PARTY-NOTICES.md`.
+
 ## Mở khoá nhanh và quên master password
 
 ### Vân tay / mật khẩu máy
@@ -248,7 +269,10 @@ Mã nguồn chính:
 - `src/lib/totp.ts`: mã OTP
 - `src/lib/share.ts`: link chia sẻ (mã hoá, hai loại link, thu hồi)
 - `src/lib/bio.ts`: mở khoá bằng vân tay / mật khẩu máy (WebAuthn PRF)
-- `src/lib/recovery.ts`: khoá khôi phục
+- `src/lib/recovery.ts`, `src/lib/recoveryKit.ts`: khoá khôi phục và bộ khôi phục
+- `src/lib/qr.ts`: đọc mã QR (OTP, Google Authenticator)
+- `src/lib/ai.ts`: tách tin nhắn bằng Claude
+- `src/icons/`: các bộ icon, tạo bằng `node scripts/gen-icons.cjs`
 - `src/ext/`: phần riêng của extension: `background.ts` (service worker), `content.ts` (gợi ý trên
   trang), `fill.ts` (điền vào form)
 - `src/ui/`: giao diện

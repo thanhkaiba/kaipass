@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { openInTab } from '../ext/browser';
 import { isPopup } from '../lib/platform';
-import { extractKey, keyFromFile } from '../lib/recoveryKit';
+const kitLib = () => import('../lib/recoveryKit');
 import { Drive } from '../lib/drive';
 import { disableBio } from '../lib/bio';
 import { findRecovery, recoverPassword, resealRecovery, type RecoveryRecord } from '../lib/recovery';
@@ -112,7 +112,7 @@ export function ForgotDialog({
     setBusy(true);
     setError('');
     try {
-      await onRecovered(await recoverPassword(record, extractKey(text) ?? text));
+      await onRecovered(await recoverPassword(record, (await kitLib()).extractKey(text) ?? text));
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -126,7 +126,7 @@ export function ForgotDialog({
 
   /** The kit file, a text file, or a photo / screenshot of the printed kit's QR code. */
   const fromFile = async (file: Blob) => {
-    const found = await keyFromFile(file).catch(() => undefined);
+    const found = await (await kitLib()).keyFromFile(file).catch(() => undefined);
     if (!found) return setError('Không tìm thấy khoá khôi phục trong file này');
     setKey(found);
     void recover(found);

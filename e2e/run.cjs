@@ -509,6 +509,127 @@ async function localFlow(browser) {
   check('QR không phải mã OTP: báo rõ', (await page.getByRole('alert').textContent()).includes('không phải mã xác thực hai bước'));
   await page.getByRole('button', { name: 'Đóng' }).click();
 
+  // ---- "paste a message": Claude splits it into items (the API is faked here) ----
+  const claude = { requests: [], reply: null };
+  // The SDK sends the key as "Authorization: Bearer"; older versions used "x-api-key".
+  const apiKeyOf = (req) => req.headers()['x-api-key'] ?? (req.headers().authorization ?? '').replace(/^Bearer /, '');
+  await ctx.route('https://api.anthropic.com/**', async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.pathname === '/v1/models') {
+      if (apiKeyOf(req) !== 'sk-ant-test') return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [{ type: 'model', id: 'claude-opus-5-5', display_name: 'Claude Opus 5.5', created_at: '2026-01-01T00:00:00Z' }], has_more: false, first_id: 'claude-opus-5-5', last_id: 'claude-opus-5-5' }) });
+    }
+    claude.requests.push({ headers: req.headers(), body: JSON.parse(req.postData()) });
+    const r = claude.reply;
+    if (r.status) return route.fulfill({ status: r.status, contentType: 'application/json', body: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }) });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'msg_test', type: 'message', role: 'assistant', model: claude.requests.at(-1).body.model,
+        content: r.refusal ? [] : [{ type: 'text', text: JSON.stringify({ items: r.items }) }],
+        stop_reason: r.refusal ? 'refusal' : 'end_turn', stop_sequence: null,
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    });
+  });
+  const aiItem = (o) => ({ type: 'login', title: '', username: '', password: '', url: '', otp: '', notes: '', fields: [], ...o });
+  const openPaste = async () => {
+    await page.getByRole('button', { name: 'Thêm', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Dán tin nhắn (Claude)…' }).click();
+  };
+
+  claude.reply = { items: [aiItem({ title: 'AWS (prod)', username: 'theo', password: 'Abc@123456', url: 'https://123456789012.signin.aws.amazon.com/console', otp: 'JBSWY3DPEHPK3PXP', fields: [{ name: 'Account ID', value: '123456789012', secret: false }] })] };
+  await openPaste();
+  await page.getByLabel('Tin nhắn có thông tin tài khoản').fill('acc AWS prod: theo / Abc@123456\nMFA secret: JBSWY3DPEHPK3PXP\nlink: https://123456789012.signin.aws.amazon.com/console');
+  await page.getByLabel('Claude API key').fill('sk-ant-wrong');
+  await page.getByRole('button', { name: 'Tách bằng Claude' }).click();
+  await page.getByRole('alert').waitFor();
+  check('Claude: API key sai bị báo rõ trước khi gửi nội dung', (await page.getByRole('alert').textContent()).includes('API key không đúng') && claude.requests.length === 0);
+  await page.getByLabel('Claude API key').fill('sk-ant-test');
+  await shot(page, '15-ai-paste');
+  await page.getByRole('button', { name: 'Tách bằng Claude' }).click();
+  await page.getByLabel('Tên', { exact: true }).waitFor();
+  const sent = claude.requests.at(-1);
+  check('Claude: một tài khoản thì mở sẵn để xem lại trước khi lưu', (await page.getByLabel('Tên', { exact: true }).inputValue()) === 'AWS (prod)' && (await page.getByLabel('Tên đăng nhập').inputValue()) === 'theo' && (await page.getByLabel('Mật khẩu', { exact: true }).inputValue()) === 'Abc@123456');
+  check('Claude: gọi đúng mô hình, có kết quả theo cấu trúc và dự phòng khi bị từ chối',
+    sent.body.model === 'claude-opus-5-5' && sent.body.output_config?.format?.type === 'json_schema' && sent.body.fallbacks === 'default' &&
+    (sent.headers['anthropic-beta'] ?? '').includes('server-side-fallback-2026-07-01') && (sent.headers['x-api-key'] ?? sent.headers.authorization?.replace(/^Bearer /, '')) === 'sk-ant-test',
+    JSON.stringify({ model: sent.body.model, format: sent.body.output_config?.format?.type, fallbacks: sent.body.fallbacks, beta: sent.headers['anthropic-beta'] }));
+  check('Claude: chỉ gửi nội dung đã dán, không gửi vault', JSON.stringify(sent.body).includes('acc AWS prod') && !JSON.stringify(sent.body).includes('p@ss-GitHub'));
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.locator('.detail-title h2', { hasText: 'AWS (prod)' }).waitFor();
+  check('Claude: mục lưu có mã OTP chạy được', /^\d{6}$/.test(await otpText(page)));
+
+  claude.reply = { items: [aiItem({ title: 'Shopee', username: 'shop1', password: 'pw1' }), aiItem({ type: 'note', title: 'Wi-Fi văn phòng', fields: [{ name: 'Mật khẩu Wi-Fi', value: 'wifi-pass', secret: true }] })] };
+  await openPaste();
+  check('Claude: đã lưu API key, không hỏi lại', (await page.getByLabel('Claude API key').count()) === 0);
+  await page.getByLabel('Tin nhắn có thông tin tài khoản').fill('shopee shop1/pw1, wifi văn phòng: wifi-pass');
+  const shotB64 = (await QRCode.toBuffer('just an image', { width: 120 })).toString('base64');
+  await page.evaluate(async (b64) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'shot.png', { type: 'image/png' }));
+    document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+  }, shotB64);
+  await page.getByAltText('Ảnh dán 1').waitFor();
+  await page.getByRole('button', { name: 'Tách bằng Claude' }).click();
+  await page.getByText('Claude tìm thấy 2 mục').waitFor();
+  check('Claude: ảnh chụp màn hình được gửi kèm', claude.requests.at(-1).body.messages[0].content.some((b) => b.type === 'image' && b.source.media_type === 'image/png'));
+  await page.getByLabel('Chọn Wi-Fi văn phòng').uncheck();
+  await page.getByRole('button', { name: 'Thêm 1 mục' }).click();
+  await page.getByText('Đã thêm 1 mục').waitFor();
+  const afterAi = await titles(page);
+  check('Claude: nhiều mục thì chọn rồi thêm', afterAi.includes('Shopee') && !afterAi.includes('Wi-Fi văn phòng'));
+
+  claude.reply = { refusal: true, items: [] };
+  await openPaste();
+  await page.getByLabel('Tin nhắn có thông tin tài khoản').fill('something');
+  await page.getByRole('button', { name: 'Tách bằng Claude' }).click();
+  await page.getByRole('alert').waitFor();
+  check('Claude: bị từ chối thì báo rõ', (await page.getByRole('alert').textContent()).includes('từ chối'));
+  await page.getByRole('button', { name: 'Đóng' }).click();
+
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Claude AI' }).click();
+  await page.getByLabel('Mô hình Claude').selectOption('claude-haiku-5-5');
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  claude.reply = { items: [] };
+  await openPaste();
+  await page.getByLabel('Tin nhắn có thông tin tài khoản').fill('nothing useful');
+  await page.getByRole('button', { name: 'Tách bằng Claude' }).click();
+  await page.getByRole('alert').waitFor();
+  const haikuReq = claude.requests.at(-1);
+  check('Claude: đổi mô hình trong Cài đặt có tác dụng (Haiku không gửi dự phòng)', haikuReq.body.model === 'claude-haiku-5-5' && haikuReq.body.fallbacks === undefined);
+  check('Claude: không có gì thì báo, không tạo mục rỗng', (await page.getByRole('alert').textContent()).includes('Không thấy'));
+  await page.getByRole('button', { name: 'Đóng' }).click();
+
+  // ---- icon packs and accent colour ----
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  await page.getByRole('button', { name: 'Bộ icon Phosphor Duotone' }).click();
+  await page.locator('.sidebar .icon-raw svg').first().waitFor({ state: 'attached' });
+  check('đổi bộ icon: dùng ngay', (await page.locator('.sidebar .icon-raw').count()) > 5);
+  await page.getByRole('button', { name: 'Hồng' }).click();
+  check('đổi màu chủ đạo', (await page.evaluate(() => document.documentElement.dataset.accent)) === 'pink');
+  await shot(page, '16-look');
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  await page.reload();
+  await page.getByLabel('Master password').waitFor();
+  await page.locator('.icon-raw svg').first().waitFor({ state: 'attached' });
+  check('bộ icon và màu được nhớ sau khi tải lại', (await page.evaluate(() => document.documentElement.dataset.accent)) === 'pink');
+  await page.getByLabel('Master password').fill(PW2);
+  await page.getByRole('button', { name: 'Mở khoá', exact: true }).click();
+  await waitStatus(page, 'local');
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Giao diện' }).click();
+  await page.getByRole('button', { name: 'Bộ icon Emoji' }).click();
+  await page.locator('.sidebar .icon-emoji').first().waitFor({ state: 'attached' });
+  check('bộ icon Emoji', (await page.locator('.sidebar .icon-emoji').count()) > 5);
+  await page.getByRole('button', { name: 'Bộ icon KaiPass' }).click();
+  await page.getByRole('button', { name: 'Xanh dương' }).click();
+  await page.getByRole('button', { name: 'Đóng' }).click();
+
   // Wiping for real, through the guarded path.
   await page.getByRole('button', { name: 'Khoá' }).click();
   await page.getByRole('button', { name: 'Quên master password?' }).click();
@@ -518,7 +639,9 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: /Chỉ lưu trên thiết bị này/ }).waitFor();
   check('xoá xong quay về màn hình tạo vault', true);
 
-  check('không có lỗi trong console (bản build có CSP)', problems.length === 0, problems.join(' | '));
+  // The only expected one: the deliberate wrong-API-key check answers 401.
+  const unexpected = problems.filter((p) => !/status of 401/.test(p));
+  check('không có lỗi trong console (bản build có CSP)', unexpected.length === 0, unexpected.join(' | '));
   await ctx.close();
 }
 

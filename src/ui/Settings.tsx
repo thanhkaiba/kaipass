@@ -7,7 +7,7 @@ import { importOnePux, type ImportResult } from '../lib/onepux';
 import { isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes, setAutoLockMinutes } from '../lib/prefs';
 import { recoveryEnabled, removeRecovery, resealRecovery, setUpRecovery } from '../lib/recovery';
-import { buildKit, kitFileName } from '../lib/recoveryKit';
+const kitLib = () => import('../lib/recoveryKit');
 import { type Session } from '../lib/session';
 import {
   CopyBtn,
@@ -23,9 +23,10 @@ import {
   useToast,
 } from './bits';
 import { WipeSection } from './Forgot';
+import { LookSettings } from './Look';
 import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
-type Tab = 'security' | 'data' | 'web' | 'device';
+type Tab = 'security' | 'data' | 'web' | 'ai' | 'look' | 'device';
 
 function Setting({
   icon,
@@ -198,9 +199,14 @@ export function Settings({
       toast(bio ? 'Đã đổi master password. Hãy bật lại vân tay.' : 'Đã đổi master password');
     });
 
-  const saveKit = async (key: string) => downloadBytes(kitFileName(), await buildKit(key), 'text/html');
+  const [kitName, setKitName] = useState('');
+  const saveKit = async (key: string) => {
+    const kit = await kitLib();
+    setKitName(kit.kitFileName());
+    downloadBytes(kit.kitFileName(), await kit.buildKit(key), 'text/html');
+  };
   const printKit = async (key: string) => {
-    const url = URL.createObjectURL(new Blob([await buildKit(key)], { type: 'text/html' }));
+    const url = URL.createObjectURL(new Blob([await (await kitLib()).buildKit(key)], { type: 'text/html' }));
     window.open(url, '_blank', 'noopener');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
@@ -229,6 +235,8 @@ export function Settings({
     ['security', 'shield', 'Bảo mật'],
     ['data', 'folder', 'Dữ liệu'],
     ...(isExtension ? ([['web', 'puzzle', 'Gợi ý trên web']] as [Tab, string, string][]) : []),
+    ['ai', 'sparkle', 'Claude AI'],
+    ['look', 'image', 'Giao diện'],
     ['device', 'device', 'Thiết bị'],
   ];
 
@@ -334,7 +342,7 @@ export function Settings({
                           <p className="ok small">
                             <Icon name="download" />
                             <span>
-                              Đã tải về <b>{kitFileName()}</b>. Lúc quên master password, chỉ cần chọn file này (hoặc ảnh
+                              Đã tải về <b>{kitName}</b>. Lúc quên master password, chỉ cần chọn file này (hoặc ảnh
                               chụp bản in) là mở được vault.
                             </span>
                           </p>
@@ -544,6 +552,19 @@ export function Settings({
                 </div>
               )}
 
+              {tab === 'ai' && (
+                <AiSettings
+                  apiKey={vault.getSetting('anthropicKey')}
+                  model={vault.getSetting('aiModel') || 'claude-opus-5-5'}
+                  onSave={async (k, v) => {
+                    vault.setSetting(k, v);
+                    await session.commit();
+                  }}
+                />
+              )}
+
+              {tab === 'look' && <LookSettings />}
+
               {tab === 'device' && (
                 <WipeSection
                   mode={meta.mode}
@@ -591,5 +612,104 @@ export function Settings({
         />
       )}
     </div>
+  );
+}
+
+const AI_MODEL_OPTIONS = [
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 · chính xác nhất' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 · nhanh, rẻ hơn' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 · rẻ nhất' },
+];
+
+function AiSettings({
+  apiKey,
+  model,
+  onSave,
+}: {
+  apiKey: string;
+  model: string;
+  onSave: (key: 'anthropicKey' | 'aiModel', value: string) => Promise<void>;
+}) {
+  const toast = useToast();
+  const [editing, setEditing] = useState(!apiKey);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const { checkKey } = await import('../lib/ai');
+      await checkKey(key.trim());
+      await onSave('anthropicKey', key.trim());
+      setKey('');
+      setEditing(false);
+      toast('Đã lưu Claude API key');
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="group">
+        <Setting
+          icon="key"
+          on={!!apiKey}
+          title="Claude API key"
+          info="Dùng cho tính năng Dán tin nhắn. Key được lưu trong vault (đã mã hoá) và đồng bộ cùng vault. Lấy key ở console.anthropic.com → API Keys."
+          sub={apiKey ? `${apiKey.slice(0, 10)}…${apiKey.slice(-4)}` : 'Chưa có'}
+        >
+          {apiKey && !editing && (
+            <>
+              <IconButton
+                icon="trash"
+                tone="danger"
+                label="Xoá API key"
+                onClick={() => void onSave('anthropicKey', '').then(() => setEditing(true))}
+              />
+              <button type="button" onClick={() => setEditing(true)}>
+                Đổi
+              </button>
+            </>
+          )}
+        </Setting>
+        {editing && (
+          <div className="setting-panel">
+            <SecretInput label="API key" hideLabel placeholder="sk-ant-…" value={key} onChange={setKey} mono autoFocus={!apiKey} />
+            {error && (
+              <p className="error" role="alert">
+                <Icon name="alert" />
+                <span>{error}</span>
+              </p>
+            )}
+            <button type="button" className="primary" disabled={busy || !key.trim()} onClick={() => void save()}>
+              {busy ? 'Đang kiểm tra…' : 'Kiểm tra và lưu'}
+            </button>
+          </div>
+        )}
+        <Setting icon="sparkle" title="Mô hình" info="Opus chính xác nhất. Sonnet và Haiku rẻ hơn, thường đủ cho việc tách tin nhắn.">
+          <select
+            aria-label="Mô hình Claude"
+            value={model}
+            style={{ width: 'auto' }}
+            onChange={(e) => void onSave('aiModel', e.target.value)}
+          >
+            {AI_MODEL_OPTIONS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </Setting>
+      </div>
+      <p className="note">
+        <Icon name="shield" />
+        <span>Chỉ nội dung bạn dán vào hộp "Dán tin nhắn" được gửi tới Anthropic, và chỉ khi bạn bấm nút. Vault không bao giờ được gửi đi.</span>
+      </p>
+    </>
   );
 }

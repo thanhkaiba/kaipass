@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { captureTab, currentTab, type PageTab } from '../ext/browser';
 import { isPopup } from '../lib/platform';
-import { otpFromQrText, readQrImage, type QrResult } from '../lib/qr';
+import type { QrResult } from '../lib/qr';
+
+const qrLib = () => import('../lib/qr');
 import { errorText, Icon, Modal } from './bits';
 
 /**
@@ -25,9 +27,9 @@ export function QrScanDialog({
   const file = useRef<HTMLInputElement>(null);
   const done = useRef(false);
 
-  const accept = (text: string | null, page?: PageTab) => {
+  const accept = async (text: string | null, page?: PageTab) => {
     if (!text) throw new Error('Không thấy mã QR. Hãy để mã QR hiện rõ, không bị che hay quá nhỏ.');
-    const result = otpFromQrText(text);
+    const result = (await qrLib()).otpFromQrText(text);
     if (result.accounts.length === 0) throw new Error('Mã QR không có tài khoản nào dùng được');
     done.current = true;
     onFound(result, page);
@@ -45,7 +47,7 @@ export function QrScanDialog({
     }
   };
 
-  const fromBlob = (blob: Blob) => run('image', async () => accept(await readQrImage(blob)));
+  const fromBlob = (blob: Blob) => run('image', async () => accept(await (await qrLib()).readQrImage(blob)));
 
   useEffect(() => {
     currentTab().then(setTab, () => {});
@@ -63,7 +65,7 @@ export function QrScanDialog({
         const text = e.clipboardData?.getData('text') ?? '';
         if (/^otpauth(-migration)?:\/\//i.test(text.trim())) {
           e.preventDefault();
-          void run('image', async () => accept(text));
+          void run('image', () => accept(text));
         }
       }
     };
@@ -86,14 +88,8 @@ export function QrScanDialog({
         await video.current.play();
         timer = setInterval(async () => {
           if (!video.current || done.current) return;
-          const text = await readQrImage(video.current);
-          if (text && !done.current) {
-            try {
-              accept(text);
-            } catch (e) {
-              setError(errorText(e));
-            }
-          }
+          const text = await (await qrLib()).readQrImage(video.current);
+          if (text && !done.current) await accept(text).catch((e) => setError(errorText(e)));
         }, 350);
       } catch (e) {
         setError(`Không mở được camera: ${errorText(e)}`);
@@ -116,7 +112,7 @@ export function QrScanDialog({
             type="button"
             className="scan-option primary-option"
             disabled={!!busy}
-            onClick={() => void run('tab', async () => accept(await readQrImage(await captureTab(tab)), tab))}
+            onClick={() => void run('tab', async () => accept(await (await qrLib()).readQrImage(await captureTab(tab)), tab))}
           >
             <Icon name="device" />
             <span>
