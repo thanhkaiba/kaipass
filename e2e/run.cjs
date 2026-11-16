@@ -564,7 +564,7 @@ async function localFlow(browser) {
 
   claude.reply = { items: [aiItem({ title: 'Shopee', username: 'shop1', password: 'pw1' }), aiItem({ type: 'note', title: 'Wi-Fi văn phòng', fields: [{ name: 'Mật khẩu Wi-Fi', value: 'wifi-pass', secret: true }] })] };
   await openPaste();
-  check('Claude: đã lưu API key, không hỏi lại', (await page.getByLabel('Claude API key').count()) === 0);
+  check('Claude: đã lưu API key, không hỏi lại, cho thấy key đang dùng', (await page.getByLabel('Claude API key').count()) === 0 && (await page.locator('.ai-key-row').textContent()).includes('sk-ant-…test'));
   await page.getByLabel('Tin nhắn có thông tin tài khoản').fill('shopee shop1/pw1, wifi văn phòng: wifi-pass');
   const shotB64 = (await QRCode.toBuffer('just an image', { width: 120 })).toString('base64');
   await page.evaluate(async (b64) => {
@@ -590,8 +590,9 @@ async function localFlow(browser) {
   check('Claude: bị từ chối thì báo rõ', (await page.getByRole('alert').textContent()).includes('từ chối'));
   await page.getByRole('button', { name: 'Đóng' }).click();
 
-  await page.getByRole('button', { name: 'Cài đặt' }).click();
-  await page.getByRole('button', { name: 'Claude AI' }).click();
+  await openPaste();
+  await page.getByRole('button', { name: 'Đổi trong Cài đặt' }).click();
+  check('Claude: key đã lưu nằm trong Cài đặt → Claude AI', (await page.getByRole('dialog', { name: 'Cài đặt' }).textContent()).includes('sk-ant-tes…test'));
   await page.getByLabel('Mô hình Claude').selectOption('claude-haiku-5-5');
   await page.getByRole('button', { name: 'Đóng' }).click();
   claude.reply = { items: [] };

@@ -26,7 +26,7 @@ import { WipeSection } from './Forgot';
 import { LookSettings } from './Look';
 import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
-type Tab = 'security' | 'data' | 'web' | 'ai' | 'look' | 'device';
+export type Tab = 'security' | 'data' | 'web' | 'ai' | 'look' | 'device';
 
 function Setting({
   icon,
@@ -78,14 +78,16 @@ export function Settings({
   session,
   onClose,
   onReplace,
+  initialTab = 'security',
 }: {
   session: Session;
   onClose: () => void;
   onReplace: (s: Session) => void;
+  initialTab?: Tab;
 }) {
   const toast = useToast();
   const { vault, meta } = session;
-  const [tab, setTab] = useState<Tab>('security');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [imported, setImported] = useState<ImportResult | null>(null);

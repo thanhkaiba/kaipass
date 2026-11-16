@@ -7,6 +7,12 @@ type Ai = typeof import('../lib/ai');
 type Img = { mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'; data: string; url: string };
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+const MODEL_LABEL: Record<string, string> = {
+  'claude-opus-5-5': 'Claude Opus 5.5',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-haiku-5-5': 'Claude Haiku 5.5',
+};
+const masked = (k: string) => `${k.slice(0, 7)}…${k.slice(-4)}`;
 const MAX_IMAGE = 5 * 1024 * 1024;
 
 async function toImage(file: Blob): Promise<Img> {
@@ -27,6 +33,7 @@ export function AiPasteDialog({
   onSaveKey,
   onEdit,
   onAddAll,
+  onOpenSettings,
   onClose,
 }: {
   vault: Vault;
@@ -34,6 +41,8 @@ export function AiPasteDialog({
   /** One item, or the user wants to check one: open it in the editor. */
   onEdit: (draft: ItemDraft) => void;
   onAddAll: (drafts: ItemDraft[]) => Promise<void>;
+  /** Opens Settings → Claude AI, where the saved key and model live. */
+  onOpenSettings: () => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
@@ -185,13 +194,24 @@ export function AiPasteDialog({
               ))}
             </div>
           )}
-          {!hasKey && (
+          {hasKey ? (
+            <div className="ai-key-row">
+              <Icon name="key" />
+              <span className="grow">
+                <span className="mono">{masked(vault.getSetting('anthropicKey'))}</span>
+                <span className="muted"> · {MODEL_LABEL[model] ?? model}</span>
+              </span>
+              <button type="button" className="link" onClick={onOpenSettings}>
+                Đổi trong Cài đặt
+              </button>
+            </div>
+          ) : (
             <SecretInput
               label="Claude API key"
-              hint="Lấy ở console.anthropic.com → API Keys. Key được lưu trong vault (đã mã hoá) và đồng bộ cùng vault."
+              hint="Chỉ nhập một lần: key được kiểm tra rồi lưu vào Cài đặt → Claude AI (trong vault, đã mã hoá, đồng bộ cùng vault). Lấy key ở console.anthropic.com → API Keys."
               value={key}
               onChange={setKey}
-              placeholder="sk-ant-…"
+              placeholder="sk-ant-… (nhập một lần, sẽ được lưu)"
               mono
             />
           )}

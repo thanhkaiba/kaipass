@@ -2468,3 +2468,17 @@ kbd {
   :root[data-accent='orange'] { --accent: #ff8a4c; --accent-hover: #ffa270; --accent-soft: #3b2214; }
   :root[data-accent='teal'] { --accent: #35c9d1; --accent-hover: #5ad5db; --accent-soft: #0f2f31; }
 }
+
+.ai-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.ai-key-row .icon {
+  color: var(--ok);
+}

@@ -12,7 +12,7 @@ import { cleanupExpiredShares, sharedToDraft, takeIncoming } from '../lib/share'
 import type { OtpAccount } from '../lib/qr';
 import { AiPasteDialog } from './AiPaste';
 import { QrScanDialog } from './QrScan';
-import { Settings } from './Settings';
+import { Settings, type Tab as SettingsTab } from './Settings';
 import { ImportShareDialog } from './Share';
 import { blankDraft, TYPE_LABEL, TYPES } from './types';
 
@@ -83,7 +83,7 @@ export function Main({
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [pane, setPane] = useState<'nav' | 'list' | 'detail'>('list');
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState<false | SettingsTab>(false);
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<PageTab | undefined>();
   const [importing, setImporting] = useState(false);
@@ -337,7 +337,7 @@ export function Main({
             <span className="dot" />
             <span>{SYNC_LABEL[session.status]}</span>
           </button>
-          <IconButton icon="settings" label="Cài đặt" onClick={() => setSettings(true)} />
+          <IconButton icon="settings" label="Cài đặt" onClick={() => setSettings('security')} />
           <IconButton icon="lock" label="Khoá" onClick={() => onLock(session)} />
         </div>
       </nav>
@@ -540,6 +540,10 @@ export function Main({
             setDraft({ ...d, folderId: filter.k === 'folder' ? filter.id : '' });
             setPane('detail');
           }}
+          onOpenSettings={() => {
+            setPasting(false);
+            setSettings('ai');
+          }}
           onAddAll={async (drafts) => {
             await change(() => {
               for (const d of drafts) vault.upsert({ ...d, folderId: filter.k === 'folder' ? filter.id : '' });
@@ -581,7 +585,7 @@ export function Main({
       )}
 
       {settings && (
-        <Settings session={session} onClose={() => setSettings(false)} onReplace={onReplace} />
+        <Settings session={session} initialTab={settings} onClose={() => setSettings(false)} onReplace={onReplace} />
       )}
     </div>
   );
