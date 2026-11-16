@@ -7,7 +7,9 @@ bạn. Không có server, không có phí hằng tháng.
 ## Có gì
 
 - Lưu đăng nhập, thẻ, giấy tờ, ghi chú bảo mật, kèm file đính kèm (ảnh CCCD, recovery key…).
-- Mã OTP (TOTP): dán chuỗi `otpauth://…` hoặc secret key.
+- Mã OTP (TOTP): quét mã QR mà không cần camera (mã QR đang hiện trên trang, ảnh chụp màn hình
+  dán bằng Ctrl/⌘+V, file ảnh, hoặc camera nếu có), hoặc dán chuỗi `otpauth://…` / secret key.
+  Đọc được cả mã "Export accounts" của Google Authenticator (thêm mọi tài khoản cùng lúc).
 - Nhập dữ liệu từ 1Password (file `.1pux`), gồm cả OTP, trường tuỳ chỉnh và file đính kèm.
 - Đồng bộ qua Google Drive, tự gộp khi hai thiết bị cùng sửa. Mất mạng vẫn xem và sửa được.
 - Cài như app trên Mac, Windows, iPhone, Android (PWA).
@@ -152,10 +154,11 @@ khoá khôi phục**:
 
 1. **Cài đặt → Mở khoá nhanh và khôi phục**: nhập master password hiện tại, bấm **Tạo** ở dòng
    "Khoá khôi phục".
-2. Ghi ra giấy hoặc tải file `.txt` khoá vừa hiện (30 ký tự). Khoá chỉ hiện một lần. Cất tách biệt với
-   master password.
-3. Khi quên: màn hình khoá → **Quên master password?** → nhập khoá khôi phục → đặt master password
-   mới. Trên thiết bị mới, mục này có ở bước "Đã tìm thấy vault trên Drive".
+2. KaiPass tự tải về **bộ khôi phục** (`KaiPass-khoi-phuc-….html`): trang có khoá và mã QR của khoá,
+   in ra được. Cất file ở nơi khác Google Drive chứa vault (USB, máy khác), hoặc in ra giấy.
+3. Khi quên: màn hình khoá → **Quên master password?** → chọn file bộ khôi phục, hoặc ảnh chụp bản in
+   (chỉ cần thấy mã QR), hoặc gõ / dán khoá → đặt master password mới. Trên thiết bị mới, mục này có ở
+   bước "Đã tìm thấy vault trên Drive".
 
 Cách làm: KaiPass tạo một cặp khoá. Khoá riêng được mã hoá bằng khoá khôi phục; master password
 được mã hoá bằng khoá công khai, nên mỗi lần bạn đổi master password nó được mã hoá lại mà không cần

@@ -403,9 +403,13 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Cài đặt' }).click();
   await page.getByRole('button', { name: 'Tạo', exact: true }).click();
   await page.getByLabel('Xác nhận master password').fill(PW);
-  await page.getByRole('button', { name: 'Tạo khoá', exact: true }).click();
+  const [kitDownload] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Tạo khoá', exact: true }).click()]);
   const recoveryKey = await page.getByTestId('recovery-key').locator('code').textContent();
   check('tạo khoá khôi phục', /^([A-Z2-9]{5}-){5}[A-Z2-9]{5}$/.test(recoveryKey), recoveryKey);
+  const kitPath = join(mkdtempSync(join(tmpdir(), 'kaipass-kit-')), kitDownload.suggestedFilename());
+  await kitDownload.saveAs(kitPath);
+  check('tự tải về bộ khôi phục có khoá', /^KaiPass-khoi-phuc-.*\.html$/.test(kitDownload.suggestedFilename()) && readFileSync(kitPath, 'utf8').includes(recoveryKey), kitDownload.suggestedFilename());
+  if (shots) await kitDownload.saveAs(join(shots, 'kit.html'));
   check('phải xác nhận đã cất khoá mới đóng được', await page.getByRole('button', { name: 'Xong' }).isDisabled());
   await shot(page, '13-recovery-key');
   await page.getByLabel('Tôi đã cất khoá này ở nơi an toàn').check();
@@ -418,10 +422,9 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
   await page.getByText('Khoá khôi phục không đúng').waitFor();
   check('khoá khôi phục sai bị từ chối', true);
-  await page.getByLabel('Khoá khôi phục').fill(recoveryKey.toLowerCase());
-  await page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
+  await page.getByLabel('File khôi phục').setInputFiles(kitPath);
   await page.getByRole('heading', { name: 'Đặt master password mới' }).waitFor();
-  check('khoá khôi phục đúng: mở được, bắt đặt master password mới', true);
+  check('chọn file bộ khôi phục: mở được, không phải gõ khoá, bắt đặt master password mới', true);
   const PW2 = 'brand new master 2026';
   await page.getByLabel('Master password mới').fill(PW2);
   await page.getByLabel('Nhập lại').fill(PW2);
@@ -435,10 +438,12 @@ async function localFlow(browser) {
   await page.getByRole('alert').waitFor();
   check('master password cũ không còn dùng được', (await page.getByRole('alert').textContent()).includes('Sai master password'));
   await page.getByRole('button', { name: 'Quên master password?' }).click();
-  await page.getByLabel('Khoá khôi phục').fill(recoveryKey);
-  await page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
+  // A photo of the printed kit: only its QR code is read.
+  const photo = join(mkdtempSync(join(tmpdir(), 'kaipass-photo-')), 'ban-in.png');
+  await QRCode.toFile(photo, `kaipass-recovery:${recoveryKey}`, { width: 420, margin: 6 });
+  await page.getByLabel('File khôi phục').setInputFiles(photo);
   await page.getByRole('heading', { name: 'Đặt master password mới' }).waitFor();
-  check('khoá khôi phục vẫn dùng được sau khi đổi master password', true);
+  check('ảnh chụp bản in (mã QR): khôi phục được, khoá vẫn dùng được sau khi đổi master password', true);
   await page.getByLabel('Master password mới').fill(PW2);
   await page.getByLabel('Nhập lại').fill(PW2);
   await page.getByRole('button', { name: 'Lưu master password mới' }).click();

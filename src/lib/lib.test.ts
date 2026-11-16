@@ -7,6 +7,7 @@ import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from
 import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongRecoveryKey } from './recovery';
 import { matchScore } from '../ext/match';
 import { otpFromQrText } from './qr';
+import { buildKit, extractKey } from './recoveryKit';
 import { Vault, WrongPasswordError } from './vault';
 
 const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
@@ -368,5 +369,18 @@ describe('OTP QR codes', () => {
   it('explains codes that are not two-factor codes', () => {
     expect(() => otpFromQrText('https://example.com')).toThrow(/không phải/);
     expect(() => otpFromQrText('otpauth://hotp/x?secret=GEZDGNBVGY3TQOJQ&counter=1')).toThrow(/HOTP/);
+  });
+});
+
+describe('recovery kit', () => {
+  const key = 'ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2-34567';
+  it('finds the key in the kit, in pasted text and in compact form', async () => {
+    const kit = await buildKit(key);
+    expect(kit).toContain(key);
+    expect(extractKey(kit)).toBe(key);
+    expect(extractKey(`Khoá khôi phục KaiPass\n\n${key}\n`)).toBe(key);
+    expect(extractKey('kaipass-recovery:' + key)).toBe(key);
+    expect(extractKey(key.toLowerCase().replace(/-/g, ' '))).toBe(key);
+    expect(extractKey('nothing here')).toBeUndefined();
   });
 });

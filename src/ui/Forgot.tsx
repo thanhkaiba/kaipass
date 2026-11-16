@@ -1,4 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { openInTab } from '../ext/browser';
+import { isPopup } from '../lib/platform';
+import { extractKey, keyFromFile } from '../lib/recoveryKit';
 import { Drive } from '../lib/drive';
 import { disableBio } from '../lib/bio';
 import { findRecovery, recoverPassword, resealRecovery, type RecoveryRecord } from '../lib/recovery';
@@ -80,6 +83,7 @@ export function ForgotDialog({
   onClose: () => void;
 }) {
   const [record, setRecord] = useState<RecoveryRecord | null | undefined>(undefined);
+  const kitInput = useRef<HTMLInputElement>(null);
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -103,18 +107,44 @@ export function ForgotDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
+  const recover = async (text: string) => {
     if (!record) return;
     setBusy(true);
     setError('');
     try {
-      await onRecovered(await recoverPassword(record, key));
+      await onRecovered(await recoverPassword(record, extractKey(text) ?? text));
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
     }
   };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void recover(key);
+  };
+
+  /** The kit file, a text file, or a photo / screenshot of the printed kit's QR code. */
+  const fromFile = async (file: Blob) => {
+    const found = await keyFromFile(file).catch(() => undefined);
+    if (!found) return setError('Không tìm thấy khoá khôi phục trong file này');
+    setKey(found);
+    void recover(found);
+  };
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith('image/'));
+      const blob = item?.getAsFile();
+      if (blob) {
+        e.preventDefault();
+        void fromFile(blob);
+      }
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record]);
 
   return (
     <Modal title="Quên master password" icon="key" onClose={onClose}>
@@ -127,7 +157,7 @@ export function ForgotDialog({
         <form className="share-form" onSubmit={submit}>
           <TextInput
             label="Khoá khôi phục"
-            hint="30 ký tự bạn đã ghi lại khi tạo khoá khôi phục trong Cài đặt. Sau đó bạn sẽ đặt master password mới."
+            hint="30 ký tự trong bộ khôi phục (file KaiPass-khoi-phuc-….html). Dán nguyên đoạn văn bản cũng được. Sau đó bạn sẽ đặt master password mới."
             value={key}
             onChange={setKey}
             placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
@@ -137,6 +167,30 @@ export function ForgotDialog({
           <button className="primary" disabled={busy || !key.trim()}>
             {busy ? 'Đang khôi phục…' : 'Khôi phục'}
           </button>
+          <div className="or">hoặc</div>
+          {isPopup ? (
+            <button type="button" onClick={openInTab} data-tip="Cửa sổ nhỏ sẽ đóng khi chọn file">
+              <Icon name="external" /> Mở trong tab để chọn file khôi phục
+            </button>
+          ) : (
+            <>
+              <input
+                ref={kitInput}
+                type="file"
+                accept=".html,.htm,.txt,image/*"
+                className="sr-only"
+                aria-label="File khôi phục"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void fromFile(f);
+                  e.target.value = '';
+                }}
+              />
+              <button type="button" onClick={() => kitInput.current?.click()} disabled={busy} data-tip="File KaiPass-khoi-phuc-….html, hoặc ảnh chụp bản in. Cũng có thể dán ảnh bằng Ctrl+V.">
+                <Icon name="upload" /> Chọn file khôi phục hoặc ảnh
+              </button>
+            </>
+          )}
         </form>
       )}
       {record === null && (

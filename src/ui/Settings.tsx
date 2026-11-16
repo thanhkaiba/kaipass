@@ -7,6 +7,7 @@ import { importOnePux, type ImportResult } from '../lib/onepux';
 import { isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes, setAutoLockMinutes } from '../lib/prefs';
 import { recoveryEnabled, removeRecovery, resealRecovery, setUpRecovery } from '../lib/recovery';
+import { buildKit, kitFileName } from '../lib/recoveryKit';
 import { type Session } from '../lib/session';
 import {
   CopyBtn,
@@ -197,6 +198,13 @@ export function Settings({
       toast(bio ? 'Đã đổi master password. Hãy bật lại vân tay.' : 'Đã đổi master password');
     });
 
+  const saveKit = async (key: string) => downloadBytes(kitFileName(), await buildKit(key), 'text/html');
+  const printKit = async (key: string) => {
+    const url = URL.createObjectURL(new Blob([await buildKit(key)], { type: 'text/html' }));
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   const checked = async (pw: string) => {
     if (!(await vault.checkPassword(pw))) throw new Error('Master password không đúng');
     return pw;
@@ -323,9 +331,16 @@ export function Settings({
                           data-testid="recovery-key"
                           ref={(el) => el?.scrollIntoView({ block: 'center', behavior: 'smooth' })}
                         >
+                          <p className="ok small">
+                            <Icon name="download" />
+                            <span>
+                              Đã tải về <b>{kitFileName()}</b>. Lúc quên master password, chỉ cần chọn file này (hoặc ảnh
+                              chụp bản in) là mở được vault.
+                            </span>
+                          </p>
                           <p className="warn small">
                             <Icon name="alert" />
-                            <span>Chỉ hiện một lần. Ghi ra giấy hoặc tải file, cất riêng với master password.</span>
+                            <span>Cất file ở nơi khác Google Drive chứa vault (USB, máy khác) hoặc in ra giấy.</span>
                           </p>
                           <div className="key-box">
                             <code className="key mono">
@@ -334,17 +349,14 @@ export function Settings({
                               <span>{newKey.slice(18)}</span>
                             </code>
                             <CopyBtn value={newKey} secret what="khoá khôi phục" />
-                            <IconButton
-                              icon="download"
-                              label="Tải file .txt"
-                              onClick={() =>
-                                downloadBytes(
-                                  'KaiPass-khoa-khoi-phuc.txt',
-                                  `Khoá khôi phục KaiPass\n\n${newKey}\n\nTạo lúc ${new Date().toLocaleString('vi-VN')}.\nDùng ở màn hình mở khoá → "Quên master password?".\nCất ở nơi an toàn, không lưu chung với master password.\n`,
-                                  'text/plain',
-                                )
-                              }
-                            />
+                          </div>
+                          <div className="actions">
+                            <button type="button" onClick={() => void saveKit(newKey)}>
+                              <Icon name="download" /> Tải lại
+                            </button>
+                            <button type="button" onClick={() => void printKit(newKey)}>
+                              <Icon name="external" /> Mở để in
+                            </button>
                           </div>
                           <label className="check">
                             <input type="checkbox" checked={keptKey} onChange={(e) => setKeptKey(e.target.checked)} />
@@ -568,7 +580,10 @@ export function Settings({
           onClose={() => setPrompt(null)}
           check={async (pw) => {
             if (hasRecovery && !window.confirm('Khoá cũ sẽ không dùng được nữa. Tiếp tục?')) return;
-            setNewKey(await setUpRecovery(await checked(pw), session.drive));
+            const key = await setUpRecovery(await checked(pw), session.drive);
+            setNewKey(key);
+            // Saved straight away, so nobody has to copy 30 characters by hand.
+            await saveKit(key);
             setKeptKey(false);
             setHasRecovery(true);
             setPrompt(null);
