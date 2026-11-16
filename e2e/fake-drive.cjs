@@ -11,11 +11,15 @@ function fakeDrive() {
     /** Simulates a Google Workspace account that forbids public links. */
     blockPublic: false,
     lastShareReferrer: '',
+    /** Other files the app keeps by name (the recovery record): name -> { id, body } */
+    others: new Map(),
   };
   let nextShare = 1;
   const meta = () => ({ id: 'file1', headRevisionId: `rev${state.rev}`, modifiedTime: 'x', trashed: false });
   const json = (route, body, status = 200) =>
     route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+  const otherId = (path) => /^\/(?:upload\/)?drive\/v3\/files\/(other-[A-Za-z0-9._-]+)$/.exec(path)?.[1];
+  const otherById = (id) => [...state.others.values()].find((o) => o.id === id);
   const shareId = (path) => {
     const m = /^\/drive\/v3\/files\/(share[0-9]+)(\/permissions)?$/.exec(path);
     return m && { id: m[1], perms: !!m[2] };
@@ -46,6 +50,11 @@ function fakeDrive() {
       const metadata = JSON.parse(body.subarray(metaStart, metaEnd).toString('utf8'));
       const start = body.indexOf(marker, metaEnd) + 4;
       const content = body.subarray(start, body.lastIndexOf(Buffer.from('\r\n--')));
+      if (metadata.name && metadata.name !== 'kaipass.kdbx' && !metadata.appProperties?.kaipassShare) {
+        const id = `other-${metadata.name}`;
+        state.others.set(metadata.name, { id, body: Buffer.from(content) });
+        return json(route, { id, headRevisionId: 'r1', modifiedTime: 'x', trashed: false });
+      }
       if (metadata.appProperties?.kaipassShare) {
         const id = `share${nextShare++}`;
         state.shares.set(id, { body: Buffer.from(content), expires: Number(metadata.appProperties.expires), public: false });
@@ -55,6 +64,17 @@ function fakeDrive() {
       state.rev++;
       state.uploads++;
       return json(route, meta());
+    }
+    const other = otherId(url.pathname);
+    if (other) {
+      const o = otherById(other);
+      if (!o) return json(route, { error: { message: 'not found' } }, 404);
+      if (req.method() === 'PATCH') {
+        o.body = req.postDataBuffer();
+        return json(route, { id: o.id, headRevisionId: 'r2', modifiedTime: 'x', trashed: false });
+      }
+      if (url.searchParams.get('alt') === 'media') return route.fulfill({ status: 200, contentType: 'application/json', body: o.body });
+      return json(route, { id: o.id, headRevisionId: 'r1', modifiedTime: 'x', trashed: false });
     }
     if (upload && req.method() === 'PATCH') {
       state.file = req.postDataBuffer();
@@ -80,6 +100,11 @@ function fakeDrive() {
         return json(route, {
           files: [...state.shares].map(([id, s]) => ({ id, appProperties: { kaipassShare: '1', expires: String(s.expires) } })),
         });
+      }
+      const named = /name = '([^']+)'/.exec(url.searchParams.get('q') ?? '')?.[1];
+      if (named && named !== 'kaipass.kdbx') {
+        const o = state.others.get(named);
+        return json(route, { files: o ? [{ id: o.id, headRevisionId: 'r1', modifiedTime: 'x', trashed: false }] : [] });
       }
       return json(route, { files: state.file ? [meta()] : [] });
     }

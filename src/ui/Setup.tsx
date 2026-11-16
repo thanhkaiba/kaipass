@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { GOOGLE_CLIENT_ID } from '../config';
 import { Drive, preloadGoogle } from '../lib/drive';
 import { isExtension } from '../lib/platform';
+import { ForgotDialog } from './Forgot';
 import { FILE_NAME, Session } from '../lib/session';
 import { Vault } from '../lib/vault';
 import { errorText, Icon, passwordProblem, SecretInput, TextInput } from './bits';
@@ -38,7 +39,14 @@ type Step =
   | { k: 'drive-new'; drive: Drive }
   | { k: 'drive-existing'; drive: Drive; bytes: ArrayBuffer; remote: { id: string; rev: string } };
 
-export function Setup({ onReady }: { onReady: (s: Session, password: string) => void }) {
+export function Setup({
+  onReady,
+  onRecovered,
+}: {
+  onReady: (s: Session, password: string) => void;
+  onRecovered: (s: Session) => void;
+}) {
+  const [forgot, setForgot] = useState(false);
   const [step, setStep] = useState<Step>({ k: 'choose' });
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -179,6 +187,9 @@ export function Setup({ onReady }: { onReady: (s: Session, password: string) => 
             <button className="primary" disabled={busy || !pw}>
               {busy ? 'Đang mở…' : 'Mở vault'}
             </button>
+            <button type="button" className="link" onClick={() => setForgot(true)}>
+              Quên master password?
+            </button>
           </>
         )}
 
@@ -227,6 +238,17 @@ export function Setup({ onReady }: { onReady: (s: Session, password: string) => 
           </button>
         )}
       </form>
+      {/* Outside the form above: the dialog has a form of its own. */}
+      {forgot && step.k === 'drive-existing' && (
+        <ForgotDialog
+          meta={{ mode: 'drive', clientId: step.drive.clientId }}
+          drive={step.drive}
+          onClose={() => setForgot(false)}
+          onRecovered={async (password) =>
+            onRecovered(await Session.adoptFromDrive(step.bytes, password, step.drive, step.remote))
+          }
+        />
+      )}
     </div>
   );
 }

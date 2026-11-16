@@ -9,12 +9,18 @@ import { parseLink } from './lib/share';
 import { ToastProvider } from './ui/bits';
 import { Lock } from './ui/Lock';
 import { Main } from './ui/Main';
+import { ResetPassword } from './ui/Forgot';
 import { Setup } from './ui/Setup';
 import { ShareView } from './ui/Share';
 
 const SHARE_LINK = !isExtension && location.hash.startsWith('#share=');
 
-type Phase = { k: 'loading' } | { k: 'setup' } | { k: 'locked'; meta: Meta } | { k: 'open'; session: Session };
+type Phase =
+  | { k: 'loading' }
+  | { k: 'setup' }
+  | { k: 'locked'; meta: Meta }
+  | { k: 'reset'; session: Session }
+  | { k: 'open'; session: Session };
 
 if (isPopup) document.documentElement.classList.add('popup');
 
@@ -83,8 +89,16 @@ export default function App() {
 
   return (
     <ToastProvider>
-      {phase.k === 'setup' && <Setup onReady={open} />}
-      {phase.k === 'locked' && <Lock meta={phase.meta} onReady={open} onWiped={refresh} />}
+      {phase.k === 'setup' && <Setup onReady={open} onRecovered={(session) => setPhase({ k: 'reset', session })} />}
+      {phase.k === 'locked' && (
+        <Lock
+          meta={phase.meta}
+          onReady={open}
+          onRecovered={(session) => setPhase({ k: 'reset', session })}
+          onWiped={refresh}
+        />
+      )}
+      {phase.k === 'reset' && <ResetPassword session={phase.session} onDone={(pw) => open(phase.session, pw)} />}
       {phase.k === 'open' && (
         <Main key={phase.session.meta.mode} session={phase.session} onLock={lock} onReplace={open} />
       )}

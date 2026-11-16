@@ -5,8 +5,11 @@ import { Drive, preloadGoogle } from '../lib/drive';
 import { importOnePux, type ImportResult } from '../lib/onepux';
 import { isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes, setAutoLockMinutes } from '../lib/prefs';
-import { wipeDevice, type Session } from '../lib/session';
-import { downloadBytes, errorText, Modal, passwordProblem, SecretInput, TextInput, useToast } from './bits';
+import { bioEnrolled, bioSupported, disableBio, enrollBio } from '../lib/bio';
+import { recoveryEnabled, removeRecovery, resealRecovery, setUpRecovery } from '../lib/recovery';
+import { type Session } from '../lib/session';
+import { WipeSection } from './Forgot';
+import { CopyBtn, downloadBytes, errorText, Modal, passwordProblem, SecretInput, TextInput, useToast } from './bits';
 import { needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
 export function Settings({
@@ -94,23 +97,52 @@ export function Settings({
       await vault.changePassword(newPw);
       await session.commit();
       await remember(newPw, autoLockMinutes());
+      await resealRecovery(newPw, session.drive);
+      if (bio) {
+        await disableBio();
+        setBio(false);
+        toast('Đã đổi master password. Hãy bật lại mở khoá bằng vân tay.');
+      }
       setOldPw('');
       setNewPw('');
       setConfirm('');
       toast('Đã đổi master password');
     });
 
-  const wipe = async () => {
-    const ok = window.confirm(
-      meta.mode === 'drive'
-        ? 'Xoá bản sao vault trên thiết bị này? File trên Google Drive vẫn còn nguyên.'
-        : 'Xoá vault trên thiết bị này? Vault này không có bản nào khác, dữ liệu sẽ mất hẳn.',
-    );
-    if (!ok) return;
-    session.close();
-    await wipeDevice();
-    window.location.reload();
+  // ---- quick unlock and recovery ----
+  const [bio, setBio] = useState(false);
+  const [bioOk, setBioOk] = useState(false);
+  const [hasRecovery, setHasRecovery] = useState(false);
+  const [confirmPw, setConfirmPw] = useState('');
+  const [newKey, setNewKey] = useState('');
+  const [keptKey, setKeptKey] = useState(false);
+  useEffect(() => {
+    void bioSupported().then(setBioOk);
+    void bioEnrolled().then(setBio);
+    void recoveryEnabled().then(setHasRecovery);
+  }, []);
+
+  const needPassword = async () => {
+    if (!(await vault.checkPassword(confirmPw))) throw new Error('Nhập đúng master password hiện tại ở ô bên trên trước');
+    return confirmPw;
   };
+
+  const turnOnBio = () =>
+    run('bio', async () => {
+      await enrollBio(await needPassword());
+      setBio(true);
+      setConfirmPw('');
+      toast('Đã bật mở khoá bằng vân tay / mật khẩu máy');
+    });
+
+  const makeRecovery = () =>
+    run('recovery', async () => {
+      if (hasRecovery && !window.confirm('Tạo khoá khôi phục mới? Khoá cũ sẽ không dùng được nữa.')) return;
+      setNewKey(await setUpRecovery(await needPassword(), session.drive));
+      setKeptKey(false);
+      setHasRecovery(true);
+      setConfirmPw('');
+    });
 
   return (
     <Modal title="Cài đặt" onClose={onClose}>
@@ -210,6 +242,111 @@ export function Settings({
       </section>
 
       <section>
+        <h3>Mở khoá nhanh và khôi phục</h3>
+        <SecretInput
+          label="Master password hiện tại (để bật các mục dưới)"
+          value={confirmPw}
+          onChange={setConfirmPw}
+          autoComplete="current-password"
+        />
+
+        <div className="setting-row">
+          <div className="grow">
+            <strong>Vân tay / mật khẩu máy</strong>
+            <div className="muted small">
+              {bio
+                ? 'Đang bật trên thiết bị này.'
+                : bioOk
+                  ? 'Mở khoá bằng Touch ID, Windows Hello, vân tay điện thoại hoặc mật khẩu máy. Chỉ áp dụng cho thiết bị này.'
+                  : 'Thiết bị hoặc trình duyệt này không có khoá màn hình dùng được cho việc này.'}
+            </div>
+          </div>
+          {bio ? (
+            <button
+              type="button"
+              onClick={() =>
+                void disableBio().then(() => {
+                  setBio(false);
+                  toast('Đã tắt mở khoá bằng vân tay');
+                })
+              }
+            >
+              Tắt
+            </button>
+          ) : isPopup ? (
+            <button type="button" onClick={openInTab}>
+              Bật trong tab
+            </button>
+          ) : (
+            <button type="button" onClick={() => void turnOnBio()} disabled={!bioOk || !!busy || !confirmPw}>
+              {busy === 'bio' ? 'Đang bật…' : 'Bật'}
+            </button>
+          )}
+        </div>
+
+        <div className="setting-row">
+          <div className="grow">
+            <strong>Khoá khôi phục</strong>
+            <div className="muted small">
+              {hasRecovery
+                ? 'Đã tạo. Dùng khi quên master password.'
+                : 'Cách duy nhất để mở lại vault nếu quên master password. Chưa tạo.'}
+            </div>
+          </div>
+          <button type="button" onClick={() => void makeRecovery()} disabled={!!busy || !confirmPw}>
+            {busy === 'recovery' ? 'Đang tạo…' : hasRecovery ? 'Tạo khoá mới' : 'Tạo'}
+          </button>
+          {hasRecovery && !newKey && (
+            <button
+              type="button"
+              className="danger"
+              onClick={() =>
+                window.confirm('Tắt khoá khôi phục? Quên master password sẽ không còn cách nào mở lại vault.') &&
+                void removeRecovery(session.drive).then(() => setHasRecovery(false))
+              }
+            >
+              Tắt
+            </button>
+          )}
+        </div>
+        {newKey && (
+          <div
+            className="recovery-key"
+            data-testid="recovery-key"
+            ref={(el) => el?.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+          >
+            <p className="warn small">
+              Đây là lần duy nhất khoá này được hiển thị. Ghi ra giấy hoặc in, cất ở nơi an toàn, tách biệt với
+              master password. Ai có khoá này và quyền vào Google Drive (hoặc thiết bị) của bạn sẽ mở được vault.
+            </p>
+            <div className="inputrow">
+              <code className="key mono">{newKey}</code>
+              <CopyBtn value={newKey} secret what="khoá khôi phục" />
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                downloadBytes(
+                  'KaiPass-khoa-khoi-phuc.txt',
+                  `Khoá khôi phục KaiPass\n\n${newKey}\n\nTạo lúc ${new Date().toLocaleString('vi-VN')}.\nDùng ở màn hình mở khoá → "Quên master password?".\nCất ở nơi an toàn, không lưu chung với master password.\n`,
+                  'text/plain',
+                )
+              }
+            >
+              Tải file .txt
+            </button>
+            <label className="check">
+              <input type="checkbox" checked={keptKey} onChange={(e) => setKeptKey(e.target.checked)} />
+              Tôi đã cất khoá này ở nơi an toàn
+            </label>
+            <button type="button" className="primary" disabled={!keptKey} onClick={() => setNewKey('')}>
+              Xong
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section>
         <h3>Đổi master password</h3>
         <SecretInput label="Master password hiện tại" value={oldPw} onChange={setOldPw} autoComplete="current-password" />
         <SecretInput label="Master password mới" value={newPw} onChange={setNewPw} autoComplete="new-password" />
@@ -257,9 +394,13 @@ export function Settings({
 
       <section>
         <h3>Thiết bị này</h3>
-        <button type="button" className="danger" onClick={() => void wipe()}>
-          Xoá dữ liệu trên thiết bị này
-        </button>
+        <WipeSection
+          mode={meta.mode}
+          onWiped={() => {
+            session.close();
+            window.location.reload();
+          }}
+        />
       </section>
     </Modal>
   );

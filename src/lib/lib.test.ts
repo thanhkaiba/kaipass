@@ -4,6 +4,7 @@ import { generatePassword } from './generator';
 import { importOnePux } from './onepux';
 import { normalizeOtp, parseOtp, totp } from './totp';
 import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from './share';
+import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongRecoveryKey } from './recovery';
 import { Vault, WrongPasswordError } from './vault';
 
 const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
@@ -268,5 +269,24 @@ describe('share links', () => {
     expect(parseLink(`https://x/#share=l.eyJ2Ijox.${key}`)).toMatchObject({ kind: 'inline', ref: 'eyJ2Ijox' });
     expect(parseLink('https://x/#share=d.abc.short')).toBeUndefined();
     expect(parseLink('https://example.com/')).toBeUndefined();
+  });
+});
+
+describe('recovery key', () => {
+  it('recovers the master password, also after it changes', async () => {
+    const { record, recoveryKey } = await createRecord('old master');
+    expect(recoveryKey).toMatch(/^([A-Z2-9]{5}-){5}[A-Z2-9]{5}$/);
+    expect(await recoverPassword(record, recoveryKey)).toBe('old master');
+    // Typed in lower case, without dashes, with spaces: still accepted.
+    expect(await recoverPassword(record, recoveryKey.toLowerCase().replace(/-/g, ' '))).toBe('old master');
+    const changed = await withNewPassword(record, 'new master');
+    expect(await recoverPassword(changed, recoveryKey)).toBe('new master');
+    expect(JSON.stringify(changed)).not.toContain('master');
+  });
+
+  it('rejects a wrong recovery key', async () => {
+    const { record } = await createRecord('pw');
+    await expect(recoverPassword(record, 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-FFFFF')).rejects.toBeInstanceOf(WrongRecoveryKey);
+    expect(normalizeKey('ab-cd ef')).toBe('ABCDEF');
   });
 });

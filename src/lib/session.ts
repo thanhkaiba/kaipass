@@ -26,6 +26,11 @@ export async function storedMeta(): Promise<Meta | undefined> {
   return (await kv.get<ArrayBuffer>(K_VAULT)) ? kv.get<Meta>(K_META) : undefined;
 }
 
+/** The encrypted vault file as stored on this device (for a backup before wiping). */
+export async function storedVaultBytes(): Promise<ArrayBuffer | undefined> {
+  return kv.get<ArrayBuffer>(K_VAULT);
+}
+
 export async function wipeDevice(): Promise<void> {
   await kv.clear();
   await memory.clear();

@@ -49,8 +49,8 @@ function totpNow(secretAscii) {
   return String((mac.readUInt32BE(off) & 0x7fffffff) % 1e6).padStart(6, '0');
 }
 
-async function titlesIn(bytes) {
-  const cred = new kdbxweb.Credentials(kdbxweb.ProtectedValue.fromString(PW));
+async function titlesIn(bytes, password = PW) {
+  const cred = new kdbxweb.Credentials(kdbxweb.ProtectedValue.fromString(password));
   const db = await kdbxweb.Kdbx.load(new Uint8Array(bytes).buffer, cred);
   return [...db.getDefaultGroup().allEntries()].map((e) => e.fields.get('Title')).sort();
 }
@@ -322,6 +322,116 @@ async function localFlow(browser) {
   });
   check('bộ nhớ trình duyệt không chứa dữ liệu chưa mã hoá', leaked.length === 0, leaked.join());
 
+  // ---- lock screen safety ----
+  await page.getByRole('button', { name: 'Khoá' }).click();
+  await page.getByLabel('Master password').waitFor();
+  check('màn hình mở khoá không có nút xoá', (await page.getByRole('button', { name: 'Xoá dữ liệu trên thiết bị này' }).count()) === 0);
+  await shot(page, '11-lock');
+  await page.getByRole('button', { name: 'Quên master password?' }).click();
+  await page.getByText('Không tìm thấy khoá khôi phục').waitFor();
+  check('chưa tạo khoá khôi phục: báo rõ là không lấy lại được', (await page.getByRole('dialog').textContent()).includes('không ai'));
+  await page.getByText('Xoá dữ liệu trên thiết bị này', { exact: true }).first().click();
+  const wipeBtn = page.getByRole('button', { name: 'Xoá dữ liệu trên thiết bị này' });
+  check('nút xoá bị khoá cho tới khi gõ XOÁ', await wipeBtn.isDisabled());
+  await page.getByLabel('Gõ "XOÁ" để xác nhận').fill('xoá');
+  check('gõ XOÁ thì mới bấm được', await wipeBtn.isEnabled());
+  check('vault chỉ trên máy: cảnh báo sẽ mất hẳn', (await page.locator('.danger-body').textContent()).includes('chỉ có trên thiết bị này'));
+  const [lockBackup] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Tải bản sao lưu đã mã hoá (.kdbx)' }).click()]);
+  check('tải được bản sao lưu ngay từ màn hình khoá', (await titlesIn(readFileSync(await lockBackup.path()))).length === 4);
+  await shot(page, '12-forgot');
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  await page.getByLabel('Master password').fill(PW);
+  await page.getByRole('button', { name: 'Mở khoá', exact: true }).click();
+  await waitStatus(page, 'local');
+
+  // ---- unlocking with the device (virtual fingerprint reader) ----
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: { protocol: 'ctap2', ctap2Version: 'ctap2_1', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
+  });
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByLabel('Master password hiện tại (để bật các mục dưới)').fill(PW);
+  await page.getByRole('button', { name: 'Bật', exact: true }).click();
+  await page.getByText('Đã bật mở khoá bằng vân tay').waitFor();
+  check('bật mở khoá bằng vân tay / mật khẩu máy', true);
+  await page.getByRole('button', { name: 'Đóng' }).click();
+  await page.getByRole('button', { name: 'Khoá' }).click();
+  await page.getByRole('button', { name: 'Mở khoá bằng vân tay / mật khẩu máy' }).click();
+  await waitStatus(page, 'local');
+  check('mở khoá bằng vân tay', (await titles(page)).length === 4);
+
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
+  await page.getByRole('button', { name: 'Khoá' }).click();
+  await page.getByRole('button', { name: 'Mở khoá bằng vân tay / mật khẩu máy' }).click();
+  await page.getByRole('alert').waitFor();
+  check('vân tay không khớp thì vẫn khoá', await page.getByLabel('Master password').isVisible());
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: true });
+  await page.getByLabel('Master password').fill(PW);
+  await page.getByRole('button', { name: 'Mở khoá', exact: true }).click();
+  await waitStatus(page, 'local');
+
+  // ---- recovery key ----
+  await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByLabel('Master password hiện tại (để bật các mục dưới)').fill(PW);
+  await page.getByRole('button', { name: 'Tạo', exact: true }).click();
+  const recoveryKey = await page.getByTestId('recovery-key').locator('code').textContent();
+  check('tạo khoá khôi phục', /^([A-Z2-9]{5}-){5}[A-Z2-9]{5}$/.test(recoveryKey), recoveryKey);
+  check('phải xác nhận đã cất khoá mới đóng được', await page.getByRole('button', { name: 'Xong' }).isDisabled());
+  await shot(page, '13-recovery-key');
+  await page.getByLabel('Tôi đã cất khoá này ở nơi an toàn').check();
+  await page.getByRole('button', { name: 'Xong' }).click();
+  await page.getByRole('button', { name: 'Đóng' }).click();
+
+  await page.getByRole('button', { name: 'Khoá' }).click();
+  await page.getByRole('button', { name: 'Quên master password?' }).click();
+  await page.getByLabel('Khoá khôi phục').fill('AAAAA-BBBBB-CCCCC-DDDDD-EEEEE-FFFFF');
+  await page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
+  await page.getByText('Khoá khôi phục không đúng').waitFor();
+  check('khoá khôi phục sai bị từ chối', true);
+  await page.getByLabel('Khoá khôi phục').fill(recoveryKey.toLowerCase());
+  await page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
+  await page.getByRole('heading', { name: 'Đặt master password mới' }).waitFor();
+  check('khoá khôi phục đúng: mở được, bắt đặt master password mới', true);
+  const PW2 = 'brand new master 2026';
+  await page.getByLabel('Master password mới').fill(PW2);
+  await page.getByLabel('Nhập lại').fill(PW2);
+  await page.getByRole('button', { name: 'Lưu master password mới' }).click();
+  await waitStatus(page, 'local');
+  check('sau khôi phục: dữ liệu còn nguyên', (await titles(page)).length === 4);
+  await page.getByRole('button', { name: 'Khoá' }).click();
+  check('sau khôi phục: tắt mở khoá bằng vân tay (đã đổi mật khẩu)', (await page.getByRole('button', { name: 'Mở khoá bằng vân tay / mật khẩu máy' }).count()) === 0);
+  await page.getByLabel('Master password').fill(PW);
+  await page.getByRole('button', { name: 'Mở khoá', exact: true }).click();
+  await page.getByRole('alert').waitFor();
+  check('master password cũ không còn dùng được', (await page.getByRole('alert').textContent()).includes('Sai master password'));
+  await page.getByRole('button', { name: 'Quên master password?' }).click();
+  await page.getByLabel('Khoá khôi phục').fill(recoveryKey);
+  await page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
+  await page.getByRole('heading', { name: 'Đặt master password mới' }).waitFor();
+  check('khoá khôi phục vẫn dùng được sau khi đổi master password', true);
+  await page.getByLabel('Master password mới').fill(PW2);
+  await page.getByLabel('Nhập lại').fill(PW2);
+  await page.getByRole('button', { name: 'Lưu master password mới' }).click();
+  await waitStatus(page, 'local');
+
+  const leaked2 = await page.evaluate(async (secrets) => {
+    const db = await new Promise((res, rej) => { const r = indexedDB.open('kaipass'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const all = await new Promise((res) => { const r = db.transaction('kv').objectStore('kv').getAll(); r.onsuccess = () => res(r.result); });
+    const text = all.map((v) => (v instanceof ArrayBuffer ? new TextDecoder('latin1').decode(v) : JSON.stringify(v))).join('\n');
+    return secrets.filter((x) => text.includes(x));
+  }, [PW, PW2, recoveryKey, recoveryKey.replace(/-/g, '')]);
+  check('vân tay và khoá khôi phục không để lộ mật khẩu trong bộ nhớ trình duyệt', leaked2.length === 0, leaked2.join());
+
+  // Wiping for real, through the guarded path.
+  await page.getByRole('button', { name: 'Khoá' }).click();
+  await page.getByRole('button', { name: 'Quên master password?' }).click();
+  await page.getByText('Xoá dữ liệu trên thiết bị này', { exact: true }).first().click();
+  await page.getByLabel('Gõ "XOÁ" để xác nhận').fill('XOÁ');
+  await page.getByRole('button', { name: 'Xoá dữ liệu trên thiết bị này' }).click();
+  await page.getByRole('button', { name: /Chỉ lưu trên thiết bị này/ }).waitFor();
+  check('xoá xong quay về màn hình tạo vault', true);
+
   check('không có lỗi trong console (bản build có CSP)', problems.length === 0, problems.join(' | '));
   await ctx.close();
 }
@@ -449,7 +559,7 @@ async function driveFlow(browser) {
 
   // Changing the master password on A: B is told what to do instead of silently failing.
   await a.page.getByRole('button', { name: 'Cài đặt' }).click();
-  await a.page.getByLabel('Master password hiện tại').fill(PW);
+  await a.page.getByLabel('Master password hiện tại', { exact: true }).fill(PW);
   await a.page.getByLabel('Master password mới').fill(PW + ' v2');
   await a.page.getByLabel('Nhập lại').fill(PW + ' v2');
   await a.page.getByRole('button', { name: 'Đổi master password' }).click();
@@ -461,7 +571,36 @@ async function driveFlow(browser) {
   await waitStatus(b.page, 'error');
   check('máy B báo rõ khi master password đã đổi ở máy khác', (await status(b.page).getAttribute('title')).includes('master password khác'));
 
-  for (const d of [a, b]) {
+  // A recovery key made on A lets a brand-new device in, through the record stored on Drive.
+  const PWv2 = PW + ' v2';
+  await a.page.getByRole('button', { name: 'Cài đặt' }).click();
+  await a.page.getByLabel('Master password hiện tại (để bật các mục dưới)').fill(PWv2);
+  await a.page.getByRole('button', { name: 'Tạo', exact: true }).click();
+  const driveKey = await a.page.getByTestId('recovery-key').locator('code').textContent();
+  await a.page.getByLabel('Tôi đã cất khoá này ở nơi an toàn').check();
+  await a.page.getByRole('button', { name: 'Xong' }).click();
+  await a.page.getByRole('button', { name: 'Đóng' }).click();
+  for (let i = 0; i < 50 && !drive.state.others.has('kaipass-recovery.json'); i++) await a.page.waitForTimeout(100);
+  check('khoá khôi phục: bản ghi (đã mã hoá) được lưu lên Drive', drive.state.others.has('kaipass-recovery.json') && !drive.state.others.get('kaipass-recovery.json').body.toString().includes(PWv2));
+
+  const c = await device(browser, drive);
+  await c.page.getByRole('button', { name: /Lưu trên Google Drive/ }).click();
+  await c.page.getByRole('button', { name: 'Đăng nhập Google' }).click();
+  await c.page.getByRole('heading', { name: 'Đã tìm thấy vault trên Drive' }).waitFor();
+  await c.page.getByRole('button', { name: 'Quên master password?' }).click();
+  await c.page.getByLabel('Khoá khôi phục').fill(driveKey);
+  await c.page.getByRole('button', { name: 'Khôi phục', exact: true }).click();
+  await c.page.getByRole('heading', { name: 'Đặt master password mới' }).waitFor();
+  await c.page.getByLabel('Master password mới').fill(PW + ' v3');
+  await c.page.getByLabel('Nhập lại').fill(PW + ' v3');
+  await c.page.getByRole('button', { name: 'Lưu master password mới' }).click();
+  await waitStatus(c.page, 'synced');
+  check('máy mới: khôi phục bằng khoá khôi phục trên Drive, thấy đủ dữ liệu', (await titles(c.page)).join() === want, (await titles(c.page)).join());
+  const onDriveNow = await titlesIn(drive.state.file, PW + ' v3').catch(() => []);
+  const oldStillWorks = await titlesIn(drive.state.file, PWv2).then(() => true, () => false);
+  check('vault trên Drive giờ dùng master password mới', onDriveNow.join() === want && !oldStillWorks);
+
+  for (const d of [a, b, c]) {
     const real = d.problems.filter((p) => !/Failed to load resource/.test(p));
     check('không có lỗi trong console', real.length === 0, real.join(' | '));
     await d.ctx.close();

@@ -20,7 +20,7 @@ bạn. Không có server, không có phí hằng tháng.
   khác.
 - **Trên điện thoại chưa có tự điền.** Tạm thời, mở cùng file `kaipass.kdbx` trên Google Drive bằng
   KeePassium (iOS) hoặc KeePassDX / Keepass2Android (Android).
-- **Quên master password là mất dữ liệu.** Không có cách khôi phục.
+- **Quên master password mà chưa tạo khoá khôi phục là mất dữ liệu.** Xem phần khoá khôi phục.
 - Phiên đăng nhập Google hết hạn sau khoảng một giờ. Khi đó app vẫn dùng được, chỉ cần bấm
   "Đăng nhập Google để đồng bộ" một lần.
 - App chỉ thấy file do chính nó tạo trên Drive (quyền `drive.file`). Vì vậy hãy tạo vault từ app
@@ -120,6 +120,48 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
   máy bạn và master password đang giữ trong bộ nhớ tạm. Cửa sổ KaiPass đang mở sẽ tự thấy thay đổi.
 - Extension và web app là hai bản cài riêng, cùng đồng bộ với một file trên Drive.
 
+## Mở khoá nhanh và quên master password
+
+### Vân tay / mật khẩu máy
+
+**Cài đặt → Mở khoá nhanh và khôi phục**: nhập master password hiện tại, bấm **Bật** ở dòng
+"Vân tay / mật khẩu máy". Từ đó màn hình khoá có nút mở bằng Touch ID, Windows Hello, vân tay điện
+thoại, hoặc mật khẩu / PIN của máy.
+
+- Chỉ áp dụng cho thiết bị đang dùng; mỗi thiết bị bật riêng.
+- Cách làm: KaiPass tạo một passkey trên thiết bị (WebAuthn, tính năng PRF). Mỗi lần bạn qua bước
+  vân tay hoặc PIN, thiết bị trả về một bí mật dùng để giải mã master password đã lưu (đã mã hoá) trên
+  máy. Không qua bước đó thì không đọc được.
+- Cần trình duyệt và hệ điều hành hỗ trợ WebAuthn PRF (Chrome bản mới trên macOS, Windows,
+  Android). Nếu không hỗ trợ, KaiPass báo khi bạn bấm Bật.
+- Đổi master password sẽ tắt tính năng này; bật lại sau khi đổi.
+- Trong cửa sổ nhỏ của extension, bước vân tay mở ra một cửa sổ riêng (hộp vân tay của máy sẽ làm cửa
+  sổ nhỏ tự đóng). Bật tính năng này thì làm trong tab (nút **Bật trong tab**).
+
+### Khoá khôi phục
+
+KaiPass không gửi master password đi đâu, nên quên là không ai lấy lại được, **trừ khi bạn đã tạo
+khoá khôi phục**:
+
+1. **Cài đặt → Mở khoá nhanh và khôi phục**: nhập master password hiện tại, bấm **Tạo** ở dòng
+   "Khoá khôi phục".
+2. Ghi ra giấy hoặc tải file `.txt` khoá vừa hiện (30 ký tự). Khoá chỉ hiện một lần. Cất tách biệt với
+   master password.
+3. Khi quên: màn hình khoá → **Quên master password?** → nhập khoá khôi phục → đặt master password
+   mới. Trên thiết bị mới, mục này có ở bước "Đã tìm thấy vault trên Drive".
+
+Cách làm: KaiPass tạo một cặp khoá. Khoá riêng được mã hoá bằng khoá khôi phục; master password
+được mã hoá bằng khoá công khai, nên mỗi lần bạn đổi master password nó được mã hoá lại mà không cần
+khoá khôi phục. Bản ghi này (đã mã hoá) nằm trên thiết bị và, với vault trên Drive, trong file
+`kaipass-recovery.json` cạnh vault. Ai có khoá khôi phục **và** quyền vào Drive (hoặc thiết bị) của
+bạn sẽ mở được vault, nên hãy giữ khoá này cẩn thận như master password.
+
+### Xoá dữ liệu trên thiết bị
+
+Nút xoá không còn ở màn hình khoá. Nó nằm trong **Quên master password?** và **Cài đặt → Thiết bị
+này**, phải gõ "XOÁ" mới bấm được. Với vault chỉ lưu trên thiết bị, có nút tải bản sao lưu (đã mã hoá)
+ngay cạnh, kể cả khi chưa mở khoá.
+
 ## Chia sẻ
 
 Trong một mục, bấm biểu tượng **Chia sẻ**, chọn thời hạn (1 giờ đến 30 ngày), có thể đặt thêm
@@ -195,6 +237,8 @@ Mã nguồn chính:
 - `src/lib/onepux.ts`: nhập file 1Password
 - `src/lib/totp.ts`: mã OTP
 - `src/lib/share.ts`: link chia sẻ (mã hoá, hai loại link, thu hồi)
+- `src/lib/bio.ts`: mở khoá bằng vân tay / mật khẩu máy (WebAuthn PRF)
+- `src/lib/recovery.ts`: khoá khôi phục
 - `src/ext/`: phần riêng của extension: `background.ts` (service worker), `content.ts` (gợi ý trên
   trang), `fill.ts` (điền vào form)
 - `src/ui/`: giao diện

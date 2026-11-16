@@ -7,6 +7,7 @@ import type { Item, ItemDraft, ItemType } from '../lib/vault';
 import { copyText, errorText, Icon, useToast } from './bits';
 import { ItemEditor } from './ItemEditor';
 import { ItemView } from './ItemView';
+import { pushRecovery } from '../lib/recovery';
 import { cleanupExpiredShares, sharedToDraft, takeIncoming } from '../lib/share';
 import { Settings } from './Settings';
 import { ImportShareDialog } from './Share';
@@ -81,7 +82,10 @@ export function Main({
       setDraft(sharedToDraft(incoming));
       setPane('detail');
     }
-    if (session.drive) void cleanupExpiredShares(session.drive).catch(() => {});
+    if (session.drive) {
+      void cleanupExpiredShares(session.drive).catch(() => {});
+      void pushRecovery(session.drive).catch(() => {});
+    }
   }, [session]);
 
   useEffect(() => session.subscribe(() => setTick((t) => t + 1)), [session]);

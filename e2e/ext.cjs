@@ -373,6 +373,9 @@ const PAGES = {
       };
     });
     await ext.goto(popupUrl);
+    await ext.getByRole('button', { name: 'Quên master password?' }).click();
+    await ext.getByText('Xoá dữ liệu trên thiết bị này', { exact: true }).first().click();
+    await ext.getByLabel('Gõ "XOÁ" để xác nhận').fill('xoa');
     await ext.getByRole('button', { name: 'Xoá dữ liệu trên thiết bị này' }).click();
     await ext.getByRole('button', { name: /Lưu trên Google Drive/ }).click();
     check('hiện địa chỉ redirect cần khai báo với Google', (await ext.locator('code.wrap').textContent()) === `https://${EXT_ID}.chromiumapp.org/`);
