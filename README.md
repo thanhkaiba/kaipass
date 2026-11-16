@@ -90,6 +90,10 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
 - **Trong ô đăng nhập:** bấm vào ô tên đăng nhập, mật khẩu hoặc mã OTP. Biểu tượng KaiPass hiện ở
   mép phải ô, kèm danh sách tài khoản đã lưu cho trang đó; chọn một tài khoản là điền. Bấm biểu
   tượng (hoặc phím mũi tên xuống) để mở lại danh sách.
+- **Hỏi lưu:** khi bạn đăng nhập bằng tài khoản chưa có trong KaiPass, hoặc đổi mật khẩu, một thẻ
+  ở góc trên hỏi **Lưu** / **Cập nhật**. Với form đăng nhập hai bước (nhập email trước, mật khẩu
+  sau), KaiPass nhớ tên đăng nhập ở bước đầu. Chọn **Không bao giờ cho trang này** để tắt hỏi ở một
+  trang. Chỉ hỏi khi KaiPass đang mở khoá.
 - **Thẻ gợi ý ở góc trên:** khi trang có ô đăng nhập và bạn đã lưu tài khoản cho trang đó, một thẻ
   "Đăng nhập bằng KaiPass" hiện ở góc trên bên phải; bấm vào tài khoản để điền.
 - **Từ thanh công cụ:** bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`),
@@ -110,10 +114,51 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
 - Để không phải gõ master password mỗi lần, extension giữ nó (và danh sách tài khoản dùng để điền)
   trong bộ nhớ tạm của trình duyệt, không ghi xuống đĩa, cho tới khi hết thời gian tự khoá, bấm
   **Khoá**, hoặc đóng trình duyệt.
-- Danh sách tài khoản dùng để gợi ý được cập nhật mỗi khi bạn mở KaiPass. Thay đổi làm trên thiết
-  bị khác sẽ có sau lần mở KaiPass kế tiếp.
-- Chưa tự hỏi lưu khi bạn đăng nhập bằng mật khẩu mới.
+- Khi đang mở khoá, extension tự đồng bộ với Drive mỗi 15 phút và khi bạn vào một trang đăng nhập
+  (nếu lần đồng bộ trước đã quá 5 phút), nên gợi ý có cả thay đổi làm trên thiết bị khác.
+- Việc lưu từ trang web và đồng bộ nền chạy trong phần chạy ngầm của extension, dùng bản vault trên
+  máy bạn và master password đang giữ trong bộ nhớ tạm. Cửa sổ KaiPass đang mở sẽ tự thấy thay đổi.
 - Extension và web app là hai bản cài riêng, cùng đồng bộ với một file trên Drive.
+
+## Chia sẻ
+
+Trong một mục, bấm biểu tượng **Chia sẻ**, chọn thời hạn (1 giờ đến 30 ngày), có thể đặt thêm
+**mật khẩu chia sẻ**, rồi **Tạo link**. Người nhận mở link bằng trình duyệt, không cần cài KaiPass,
+và có thể bấm **Lưu vào KaiPass của bạn**. Người dùng KaiPass cũng có thể dán link vào
+**Thêm → Từ link chia sẻ…**.
+
+- Dữ liệu được mã hoá AES-256 bằng một khoá ngẫu nhiên. Khoá chỉ nằm ở phần sau dấu `#` của link,
+  phần mà trình duyệt không bao giờ gửi lên máy chủ nào. Thời hạn được gắn vào dữ liệu mã hoá nên
+  không sửa được.
+- Có mật khẩu chia sẻ thì link thôi là chưa đủ để mở. Hãy gửi mật khẩu qua kênh khác với link.
+- File đính kèm không được chia sẻ.
+- Link mở ở địa chỉ web app (mặc định `https://thanhkaiba.github.io/kaipass/`, sửa trong
+  `src/config.ts`), nên web app phải được đưa lên mạng (xem phần GitHub Pages).
+
+Có hai loại link:
+
+| | Link qua Google Drive | Link tự chứa |
+|---|---|---|
+| Dữ liệu (đã mã hoá) nằm ở | Một file trên Drive của bạn, ai có link mới đọc được | Ngay trong link |
+| Thu hồi | Được: bấm **Thu hồi**, file bị xoá | Không |
+| Hết hạn | File bị xoá ở lần mở KaiPass hoặc đồng bộ nền đầu tiên sau hạn; trình xem cũng từ chối | Chỉ trình xem của KaiPass từ chối; ai giải mã thủ công vẫn đọc được |
+| Cần | Vault lưu trên Drive và một Google API key (bên dưới) | Không cần gì |
+
+KaiPass tự dùng link qua Drive khi đủ điều kiện, không thì dùng link tự chứa. Tài khoản Google công
+ty thường cấm chia sẻ file công khai; khi đó KaiPass báo rõ và cho tạo link tự chứa.
+
+### Bật link thu hồi được (Google API key)
+
+1. Google Cloud Console, cùng project → **APIs & Services → Credentials → Create credentials →
+   API key**.
+2. Bấm vào key vừa tạo. **API restrictions**: chọn **Restrict key**, tích **Google Drive API**.
+   **Application restrictions**: chọn **Websites**, thêm `https://thanhkaiba.github.io/*`.
+3. Ghi key vào `src/config.ts` (`GOOGLE_API_KEY`), hoặc tạo biến `GOOGLE_API_KEY` ở **Settings →
+   Secrets and variables → Actions → Variables** của repo. Key này không phải bí mật: nó chỉ dùng để
+   đọc file đã được chia sẻ công khai, và chỉ chạy từ địa chỉ bạn cho phép.
+
+Link chia sẻ từ 1Password không mở được trong KaiPass: mở link đó trong trình duyệt rồi copy từng mục.
+Với OTP, nhờ người gửi kèm chuỗi `otpauth://`.
 
 ## Chuyển từ 1Password
 
@@ -134,7 +179,7 @@ npm run dev        # web app tại http://localhost:5173
 npm test           # phần lõi: mã hoá, OTP, nhập 1Password, gộp dữ liệu
 npm run build      # web app → dist/
 npm run build:ext  # extension → dist-ext/
-npm run e2e        # web app trên Chromium (cần Playwright)
+VITE_GOOGLE_API_KEY=test-key npm run build && npm run e2e   # web app trên Chromium (cần Playwright)
 KAIPASS_TEST_HOSTS=1 npm run build:ext && npm run e2e:ext   # extension trên Chromium
 ```
 
@@ -149,6 +194,7 @@ Mã nguồn chính:
 - `src/lib/drive.ts`: đăng nhập Google và gọi Drive API
 - `src/lib/onepux.ts`: nhập file 1Password
 - `src/lib/totp.ts`: mã OTP
+- `src/lib/share.ts`: link chia sẻ (mã hoá, hai loại link, thu hồi)
 - `src/ext/`: phần riêng của extension: `background.ts` (service worker), `content.ts` (gợi ý trên
   trang), `fill.ts` (điền vào form)
 - `src/ui/`: giao diện

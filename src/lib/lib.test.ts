@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { generatePassword } from './generator';
 import { importOnePux } from './onepux';
 import { normalizeOtp, parseOtp, totp } from './totp';
+import { open as openShare, parseLink, seal, SharePassphraseError, b64url } from './share';
 import { Vault, WrongPasswordError } from './vault';
 
 const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
@@ -230,5 +231,42 @@ describe('1pux import', () => {
   it('rejects files that are not 1pux', async () => {
     const v = await Vault.create('pw');
     await expect(importOnePux(v, strToU8('nope'))).rejects.toThrow();
+  });
+});
+
+describe('share links', () => {
+  const item = {
+    type: 'login' as const,
+    title: 'AWS',
+    username: 'theo',
+    password: 'p@ss',
+    url: 'https://aws.amazon.com',
+    notes: '',
+    otp: 'otpauth://totp/x?secret=GEZDGNBVGY3TQOJQ',
+    fields: [],
+  };
+
+  it('round-trips, with and without a passphrase', async () => {
+    const exp = Date.now() + 3600_000;
+    const a = await seal(item, exp);
+    expect(await openShare(a.envelope, a.secret)).toEqual(item);
+    const b = await seal(item, exp, 'mèo con');
+    expect(b.envelope.salt).toBeTruthy();
+    await expect(openShare(b.envelope, b.secret, 'sai')).rejects.toBeInstanceOf(SharePassphraseError);
+    expect(await openShare(b.envelope, b.secret, 'mèo con')).toEqual(item);
+  });
+
+  it('rejects an edited expiry date or a wrong key', async () => {
+    const { envelope, secret } = await seal(item, Date.now() + 1000);
+    await expect(openShare({ ...envelope, expires: envelope.expires + 86_400_000 }, secret)).rejects.toThrow();
+    await expect(openShare(envelope, new Uint8Array(32))).rejects.toThrow();
+  });
+
+  it('parses both kinds of link', () => {
+    const key = b64url(new Uint8Array(32).fill(7));
+    expect(parseLink(`https://x.github.io/kaipass/#share=d.1AbC_d-9.${key}`)).toMatchObject({ kind: 'drive', ref: '1AbC_d-9' });
+    expect(parseLink(`https://x/#share=l.eyJ2Ijox.${key}`)).toMatchObject({ kind: 'inline', ref: 'eyJ2Ijox' });
+    expect(parseLink('https://x/#share=d.abc.short')).toBeUndefined();
+    expect(parseLink('https://example.com/')).toBeUndefined();
   });
 });

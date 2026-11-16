@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
+import type { Drive } from '../lib/drive';
 import type { Item, Vault } from '../lib/vault';
+import { ShareDialog } from './Share';
 import { Attachments } from './Attachments';
 import { CopyBtn, formatSize, Icon, OtpCode, useToast } from './bits';
 import { fieldLabel, TYPE_LABEL } from './types';
@@ -40,6 +42,7 @@ function Row({ label, value, secret, link }: { label: string; value: string; sec
 export function ItemView({
   item,
   vault,
+  drive,
   change,
   onEdit,
   onBack,
@@ -47,6 +50,7 @@ export function ItemView({
 }: {
   item: Item;
   vault: Vault;
+  drive?: Drive;
   /** Runs a vault mutation, then saves and syncs. */
   change: (fn: () => void | Promise<void>) => Promise<void>;
   onEdit: () => void;
@@ -56,6 +60,7 @@ export function ItemView({
 }) {
   const toast = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
+  const [sharing, setSharing] = useState(false);
 
   const attach = async (files: FileList | null) => {
     for (const file of Array.from(files ?? [])) {
@@ -112,6 +117,15 @@ export function ItemView({
                 onClick={() => change(() => vault.setFavorite(item.id, !item.favorite))}
               >
                 <Icon name="star" filled={item.favorite} />
+              </button>
+              <button
+                type="button"
+                className="iconbtn"
+                title="Chia sẻ"
+                aria-label="Chia sẻ"
+                onClick={() => setSharing(true)}
+              >
+                <Icon name="share" />
               </button>
               <button
                 type="button"
@@ -217,6 +231,7 @@ export function ItemView({
       <p className="muted small">
         Sửa lần cuối {item.modified ? new Date(item.modified).toLocaleString('vi-VN') : '—'}
       </p>
+      {sharing && <ShareDialog item={item} drive={drive} onClose={() => setSharing(false)} />}
     </div>
   );
 }

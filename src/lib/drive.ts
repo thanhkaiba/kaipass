@@ -23,6 +23,13 @@ export interface RemoteFile {
   rev: string;
 }
 
+/** The Google account does not allow files to be shared with "anyone with the link". */
+export class ShareBlocked extends Error {
+  constructor() {
+    super('Tài khoản Google này không cho chia sẻ file công khai');
+  }
+}
+
 export class AuthNeeded extends Error {
   constructor() {
     super('Cần đăng nhập Google');
@@ -224,5 +231,72 @@ export class Drive {
     );
     if (!res.ok) return this.fail(res);
     return toRemote(await res.json());
+  }
+
+  // ---- share links ----
+
+  /** Uploads an encrypted share and makes it readable by anyone who has its id. */
+  async createShare(bytes: ArrayBuffer, expires: number): Promise<string> {
+    const boundary = `kaipass${crypto.randomUUID().replace(/-/g, '')}`;
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
+      JSON.stringify({
+        name: 'kaipass-share.bin',
+        mimeType: 'application/octet-stream',
+        appProperties: { kaipassShare: '1', expires: String(expires) },
+      }),
+      `\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      bytes,
+      `\r\n--${boundary}--`,
+    ]);
+    const res = await this.call(`${UPLOAD}?uploadType=multipart&fields=id`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body,
+    });
+    if (!res.ok) return this.fail(res);
+    const { id } = await res.json();
+    const perm = await this.call(`${API}/${encodeURIComponent(id)}/permissions?fields=id`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+    });
+    if (!perm.ok) {
+      await this.deleteFile(id).catch(() => {});
+      throw new ShareBlocked();
+    }
+    return id;
+  }
+
+  /** Deletes a file this app created. Missing files count as deleted. */
+  async deleteFile(id: string): Promise<void> {
+    const res = await this.call(`${API}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) return this.fail(res);
+  }
+
+  /** Deletes share files whose expiry has passed; returns how many. */
+  async deleteExpiredShares(now = Date.now()): Promise<number> {
+    const q = "appProperties has { key='kaipassShare' and value='1' } and trashed = false";
+    const res = await this.call(`${API}?q=${encodeURIComponent(q)}&spaces=drive&fields=files(id,appProperties)&pageSize=1000`);
+    if (!res.ok) return this.fail(res);
+    let n = 0;
+    for (const f of (await res.json()).files ?? []) {
+      if (Number(f.appProperties?.expires) < now) {
+        await this.deleteFile(f.id);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Reads a public share without signing in. */
+  static async fetchShare(id: string, apiKey: string): Promise<ArrayBuffer | undefined> {
+    const res = await fetch(`${API}/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(apiKey)}`, {
+      // An API key restricted to the app's address needs to see where the request comes from.
+      referrerPolicy: 'strict-origin-when-cross-origin',
+    });
+    if (res.status === 404 || res.status === 403) return undefined;
+    if (!res.ok) throw new Error(`Google Drive báo lỗi ${res.status}`);
+    return res.arrayBuffer();
   }
 }

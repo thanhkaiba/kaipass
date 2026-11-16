@@ -31,11 +31,13 @@ jobs:
           # Not a secret: an OAuth client ID is public by design. Set it under
           # Settings → Secrets and variables → Actions → Variables.
           VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_API_KEY: ${{ vars.GOOGLE_API_KEY }}
 
       - name: Build browser extension
         run: npm run build:ext
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_API_KEY: ${{ vars.GOOGLE_API_KEY }}
 
       # The site goes to the gh-pages branch and the extension to a release, so nothing here
       # uses Actions artifact storage.

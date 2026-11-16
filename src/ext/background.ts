@@ -227,7 +227,25 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
   return undefined;
 }
 
+/**
+ * A sign-in form usually navigates away right after it reports what was typed, so the next page
+ * can ask for the pending save before that report is processed. Remember reports in flight per tab
+ * so the question waits for them.
+ */
+const inFlight = new Map<number, Promise<unknown>>();
+
 chrome.runtime.onMessage.addListener((req: Request, sender, reply) => {
-  handle(req, sender).then(reply, () => reply(undefined));
+  const tabId = sender.tab?.id;
+  let work: Promise<unknown>;
+  if (req.type === 'pendingSave' && tabId !== undefined && inFlight.has(tabId)) {
+    work = inFlight.get(tabId)!.then(() => handle(req, sender), () => handle(req, sender));
+  } else {
+    work = handle(req, sender);
+  }
+  if ((req.type === 'captured' || req.type === 'sawUsername') && tabId !== undefined) {
+    inFlight.set(tabId, work);
+    void work.finally(() => inFlight.get(tabId) === work && inFlight.delete(tabId));
+  }
+  work.then(reply, () => reply(undefined));
   return true; // answer asynchronously
 });

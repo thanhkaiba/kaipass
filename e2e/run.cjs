@@ -206,6 +206,86 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Từ 1Password' }).click();
   check('OTP nhập từ 1Password chạy được', (await page.getByTestId('otp-code').textContent()).replace(/\s/g, '').length === 6);
 
+  // ---- sharing (device-only vault: links carry the encrypted item) ----
+  const makeShare = async (title, { passphrase = '', expiry } = {}) => {
+    await page.getByRole('button', { name: title, exact: false }).first().click();
+    await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
+    if (expiry) await page.getByLabel('Hết hạn sau').selectOption({ label: expiry });
+    if (passphrase) await page.getByLabel('Mật khẩu chia sẻ (không bắt buộc)').fill(passphrase);
+    await page.getByRole('button', { name: 'Tạo link' }).click();
+    const url = await page.getByLabel('Link chia sẻ').inputValue();
+    await page.getByRole('button', { name: 'Đóng' }).click();
+    return url;
+  };
+  const shareLink = await makeShare('GitHub', { expiry: '1 giờ' });
+  check('tạo link chia sẻ dạng tự chứa', shareLink.startsWith(URL_) && shareLink.includes('#share=l.'), shareLink.slice(0, 60));
+  const leakedInLink = ['p@ss-GitHub', 'GEZDGNBVGY3TQOJQ', 'user@example.com'].filter((x) => decodeURIComponent(shareLink).includes(x));
+  check('link không chứa dữ liệu đọc được', leakedInLink.length === 0, leakedInLink.join());
+
+  const recipient = await device(browser, fakeDrive());
+  const rp = recipient.page;
+  await rp.goto(shareLink);
+  await rp.getByTestId('share-view').getByRole('heading', { name: 'GitHub' }).waitFor();
+  await rp.getByRole('button', { name: 'Hiện Mật khẩu' }).click();
+  check('người nhận mở link, thấy mật khẩu', (await rp.getByTestId('share-view').textContent()).includes('p@ss-GitHub'));
+  check('người nhận có mã OTP chạy được', /^\d{6}$/.test((await rp.getByTestId('otp-code').textContent()).replace(/\s/g, '')));
+  await shot(rp, '10-share-view');
+
+  const tampered = shareLink.replace(/#share=l\.(.{20})(.)/, (m, a, c) => `#share=l.${a}${c === 'A' ? 'B' : 'A'}`);
+  await rp.goto(URL_);
+  await rp.goto(tampered);
+  await rp.getByRole('alert').waitFor();
+  check('link bị sửa thì không mở được', true);
+
+  const later = await device(browser, fakeDrive());
+  await later.ctx.clock.install({ time: Date.now() + 2 * 3600_000 });
+  await later.page.goto(shareLink);
+  await later.page.getByRole('alert').waitFor();
+  check('link quá hạn thì không mở được', (await later.page.getByRole('alert').textContent()).includes('hết hạn'));
+  await later.ctx.close();
+
+  const passLink = await makeShare('Visa VCB', { passphrase: 'mèo con' });
+  await rp.goto(URL_);
+  await rp.goto(passLink);
+  await rp.getByLabel('Mật khẩu chia sẻ').fill('sai rồi');
+  await rp.getByRole('button', { name: 'Mở', exact: true }).click();
+  await rp.getByRole('alert').waitFor();
+  check('link có mật khẩu: sai mật khẩu bị từ chối', (await rp.getByRole('alert').textContent()).includes('Sai mật khẩu chia sẻ'));
+  await rp.getByLabel('Mật khẩu chia sẻ').fill('mèo con');
+  await rp.getByRole('button', { name: 'Mở', exact: true }).click();
+  await rp.getByTestId('share-view').getByRole('heading', { name: 'Visa VCB' }).waitFor();
+  check('link có mật khẩu: đúng mật khẩu thì mở được', (await rp.getByTestId('share-view').textContent()).includes('Số thẻ'));
+
+  // The recipient keeps it in their own KaiPass.
+  await rp.getByRole('button', { name: 'Lưu vào KaiPass của bạn' }).click();
+  await rp.getByRole('button', { name: /Chỉ lưu trên thiết bị này/ }).click();
+  await rp.getByLabel('Master password', { exact: true }).fill('recipient password 1');
+  await rp.getByLabel('Nhập lại').fill('recipient password 1');
+  await rp.getByRole('button', { name: 'Tạo vault' }).click();
+  await rp.getByLabel('Tên', { exact: true }).waitFor();
+  check('"Lưu vào KaiPass" mở sẵn mục để lưu', (await rp.getByLabel('Tên', { exact: true }).inputValue()) === 'Visa VCB');
+  await rp.getByRole('button', { name: 'Lưu' }).click();
+  await rp.locator('.detail-title h2', { hasText: 'Visa VCB' }).waitFor();
+
+  await rp.getByRole('button', { name: 'Thêm', exact: true }).click();
+  await rp.getByRole('menuitem', { name: 'Từ link chia sẻ…' }).click();
+  await rp.getByLabel('Link chia sẻ KaiPass').fill(shareLink);
+  await rp.getByRole('button', { name: 'Mở link' }).click();
+  await rp.getByRole('button', { name: 'Thêm vào vault' }).click();
+  await rp.getByRole('button', { name: 'Lưu' }).click();
+  await rp.locator('.detail-title h2', { hasText: 'GitHub' }).waitFor();
+  check('"Thêm → Từ link chia sẻ" đưa mục vào vault, kèm OTP', /^\d{6}$/.test((await rp.getByTestId('otp-code').textContent()).replace(/\s/g, '')));
+  check('người nhận: không có lỗi trong console', recipient.problems.length === 0, recipient.problems.join(' | '));
+  await recipient.ctx.close();
+
+  await page.getByRole('button', { name: 'GitHub' }).first().click();
+  await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
+  await page.getByText('Link đang còn hạn').waitFor();
+  check('danh sách link đang còn hạn', (await page.locator('.share-row').count()) === 1);
+  await page.getByRole('button', { name: 'Bỏ', exact: true }).click();
+  await page.getByText('Link đang còn hạn').waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Đóng' }).click();
+
   // Search, bin, restore
   await page.getByLabel('Tìm kiếm').fill('visa');
   check('tìm kiếm lọc danh sách', (await titles(page)).join() === 'Visa VCB');
@@ -265,6 +345,52 @@ async function driveFlow(browser) {
   await a.page.waitForFunction(() => document.querySelector('[data-testid=sync-status]').dataset.status !== 'synced');
   await waitStatus(a.page, 'synced');
   check('thay đổi ở máy A được đẩy lên Drive', (await titlesIn(drive.state.file)).join() === 'Từ máy A');
+
+  // ---- sharing through Drive: revocable links ----
+  const shareFromA = async () => {
+    await a.page.getByRole('button', { name: 'Từ máy A' }).first().click();
+    await a.page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
+    await a.page.getByRole('button', { name: 'Tạo link' }).click();
+  };
+  await shareFromA();
+  const driveLink = await a.page.getByLabel('Link chia sẻ').inputValue();
+  await a.page.getByRole('button', { name: 'Đóng' }).click();
+  check('vault trên Drive: link chia sẻ qua Drive', /#share=d\.share1\./.test(driveLink), driveLink.slice(0, 80));
+  check('file chia sẻ trên Drive chỉ có dữ liệu mã hoá', !drive.state.shares.get('share1').body.toString().includes('p@ss-'));
+  const viewer = await device(browser, drive);
+  await viewer.page.goto(driveLink);
+  await viewer.page.getByTestId('share-view').getByRole('heading', { name: 'Từ máy A' }).waitFor();
+  check('người nhận mở link Drive mà không cần đăng nhập Google', true);
+  check('trình duyệt gửi kèm địa chỉ trang (cho API key giới hạn theo trang)', drive.state.lastShareReferrer.startsWith(URL_), drive.state.lastShareReferrer);
+
+  await a.page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
+  await a.page.getByRole('button', { name: 'Thu hồi' }).click();
+  await a.page.getByText('Đã thu hồi link').waitFor();
+  await a.page.getByRole('button', { name: 'Đóng' }).click();
+  await viewer.page.reload();
+  await viewer.page.getByRole('alert').waitFor();
+  check('thu hồi: link không mở được nữa', (await viewer.page.getByRole('alert').textContent()).includes('thu hồi'));
+
+  drive.state.blockPublic = true;
+  await shareFromA();
+  await a.page.getByRole('alert').waitFor();
+  check('tài khoản cấm chia sẻ công khai: báo rõ', (await a.page.getByRole('alert').textContent()).includes('không cho chia sẻ file công khai'));
+  check('không để lại file chia sẻ dở', drive.state.shares.size === 0);
+  await a.page.getByRole('button', { name: 'Tạo link tự chứa' }).click();
+  check('vẫn tạo được link tự chứa', (await a.page.getByLabel('Link chia sẻ').inputValue()).includes('#share=l.'));
+  await a.page.getByRole('button', { name: 'Đóng' }).click();
+  drive.state.blockPublic = false;
+
+  await shareFromA();
+  await a.page.getByRole('button', { name: 'Đóng' }).click();
+  for (const s of drive.state.shares.values()) s.expires = Date.now() - 1000;
+  await a.page.reload();
+  await a.page.getByLabel('Master password').fill(PW);
+  await a.page.getByRole('button', { name: 'Mở khoá' }).click();
+  await waitStatus(a.page, 'synced');
+  for (let i = 0; i < 50 && drive.state.shares.size > 0; i++) await a.page.waitForTimeout(100);
+  check('link Drive quá hạn bị xoá khỏi Drive khi mở KaiPass', drive.state.shares.size === 0);
+  await viewer.ctx.close();
 
   const b = await device(browser, drive, { width: 390, height: 800 });
   await b.page.getByRole('button', { name: /Lưu trên Google Drive/ }).click();

@@ -5,6 +5,7 @@
  */
 import { Session, storedMeta } from '../lib/session';
 import type { ItemDraft } from '../lib/vault';
+import { cleanupExpiredShares } from '../lib/share';
 import { writeFillIndex } from './browser';
 import { BUMP_KEY } from './match';
 
@@ -77,6 +78,7 @@ export async function backgroundSync(password: string): Promise<boolean> {
   return withSession(password, async (session) => {
     const before = session.meta.rev;
     await session.sync();
+    if (session.drive) await cleanupExpiredShares(session.drive).catch(() => {});
     return session.meta.rev !== before;
   });
 }

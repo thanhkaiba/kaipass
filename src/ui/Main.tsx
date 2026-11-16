@@ -7,7 +7,9 @@ import type { Item, ItemDraft, ItemType } from '../lib/vault';
 import { copyText, errorText, Icon, useToast } from './bits';
 import { ItemEditor } from './ItemEditor';
 import { ItemView } from './ItemView';
+import { cleanupExpiredShares, sharedToDraft, takeIncoming } from '../lib/share';
 import { Settings } from './Settings';
+import { ImportShareDialog } from './Share';
 import { blankDraft, TYPE_LABEL, TYPES } from './types';
 
 type Filter =
@@ -70,6 +72,17 @@ export function Main({
   const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<PageTab | undefined>();
+  const [importing, setImporting] = useState(false);
+
+  // An item someone shared, brought over from the link page ("Lưu vào KaiPass").
+  useEffect(() => {
+    const incoming = takeIncoming();
+    if (incoming) {
+      setDraft(sharedToDraft(incoming));
+      setPane('detail');
+    }
+    if (session.drive) void cleanupExpiredShares(session.drive).catch(() => {});
+  }, [session]);
 
   useEffect(() => session.subscribe(() => setTick((t) => t + 1)), [session]);
 
@@ -307,6 +320,16 @@ export function Main({
                     <Icon name={t} /> {TYPE_LABEL[t]}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setAdding(false);
+                    setImporting(true);
+                  }}
+                >
+                  <Icon name="share" /> Từ link chia sẻ…
+                </button>
               </div>
             )}
           </div>
@@ -444,6 +467,7 @@ export function Main({
             key={current.id}
             item={current}
             vault={vault}
+            drive={session.drive}
             change={change}
             onEdit={() => setDraft(current)}
             onBack={() => setPane('list')}
@@ -456,6 +480,17 @@ export function Main({
           </div>
         )}
       </main>
+
+      {importing && (
+        <ImportShareDialog
+          onClose={() => setImporting(false)}
+          onUse={(shared) => {
+            setImporting(false);
+            setDraft(sharedToDraft(shared));
+            setPane('detail');
+          }}
+        />
+      )}
 
       {settings && (
         <Settings session={session} onClose={() => setSettings(false)} onReplace={onReplace} />

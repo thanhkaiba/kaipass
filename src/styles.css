@@ -906,6 +906,37 @@ button.link.file-name {
   transform: scaleX(-1);
 }
 
+/* ---- sharing ---- */
+
+.share-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-form .field,
+.share-link {
+  width: 100%;
+}
+
+.share-link input {
+  flex: 1;
+  min-width: 0;
+}
+
+.share-row {
+  width: 100%;
+  padding-left: 0;
+}
+
+.share-view {
+  max-width: 520px;
+}
+
+.share-view .card {
+  width: 100%;
+}
+
 /* ---- modal and toast ---- */
 
 .backdrop {

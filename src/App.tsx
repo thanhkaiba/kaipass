@@ -5,10 +5,14 @@ import { preloadGoogle } from './lib/drive';
 import { isExtension, isPopup } from './lib/platform';
 import { autoLockMinutes } from './lib/prefs';
 import { Session, storedMeta, type Meta } from './lib/session';
+import { parseLink } from './lib/share';
 import { ToastProvider } from './ui/bits';
 import { Lock } from './ui/Lock';
 import { Main } from './ui/Main';
 import { Setup } from './ui/Setup';
+import { ShareView } from './ui/Share';
+
+const SHARE_LINK = !isExtension && location.hash.startsWith('#share=');
 
 type Phase = { k: 'loading' } | { k: 'setup' } | { k: 'locked'; meta: Meta } | { k: 'open'; session: Session };
 
@@ -68,6 +72,14 @@ export default function App() {
     },
     [refresh],
   );
+
+  if (SHARE_LINK) {
+    return (
+      <ToastProvider>
+        <ShareView link={parseLink(location.href)} />
+      </ToastProvider>
+    );
+  }
 
   return (
     <ToastProvider>
