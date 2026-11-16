@@ -9,6 +9,30 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 const { fakeDrive } = require('./fake-drive.cjs');
+const kdbxweb = require('kdbxweb');
+const { argon2id, argon2d } = require('hash-wasm');
+
+kdbxweb.CryptoEngine.setArgon2Impl(async (password, salt, memory, iterations, length, parallelism, type) => {
+  const out = await (type === 2 ? argon2id : argon2d)({
+    password: new Uint8Array(password), salt: new Uint8Array(salt), memorySize: memory,
+    iterations, hashLength: length, parallelism, outputType: 'binary',
+  });
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+});
+
+/** Plays "another device": adds a login to the vault file on the fake Drive. */
+async function addOnOtherDevice(drive, title, url, username, password) {
+  const cred = new kdbxweb.Credentials(kdbxweb.ProtectedValue.fromString(PW));
+  const db = await kdbxweb.Kdbx.load(new Uint8Array(drive.state.file).buffer, cred);
+  const entry = db.createEntry(db.getDefaultGroup());
+  entry.fields.set('Title', title);
+  entry.fields.set('UserName', username);
+  entry.fields.set('Password', kdbxweb.ProtectedValue.fromString(password));
+  entry.fields.set('URL', url);
+  entry.times.update();
+  drive.state.file = Buffer.from(await db.save());
+  drive.state.rev++;
+}
 
 const EXT_DIR = join(__dirname, '..', 'dist-ext');
 const EXT_ID = 'eokdpgifmehmgjoelmomohkajehodpeg';
@@ -369,6 +393,43 @@ const PAGES = {
     await ext.locator('[data-testid=sync-status][data-status=synced]').waitFor({ timeout: 15000 });
     const renew = (await ext.evaluate(() => window.__flows)).at(-1);
     check('hết phiên Google thì extension tự gia hạn, không cần bấm', renew.interactive === false && renew.prompt === 'none', JSON.stringify(renew));
+
+    // Another device adds a login; visiting a login page brings it into the suggestions without
+    // opening KaiPass.
+    await addOnOtherDevice(drive, 'Từ máy khác', `http://localhost:${PORT}/login`, 'frank', 'pw-frank');
+    const revBefore = drive.state.rev;
+    await site.goto(`http://localhost:${PORT}/login`);
+    let synced = false;
+    for (let i = 0; i < 100 && !synced; i++) {
+      const list = await ext.evaluate(async () => (await chrome.storage.session.get('kaipass.fill'))['kaipass.fill'] ?? []);
+      synced = list.some((e) => e.username === 'frank');
+      if (!synced) await site.waitForTimeout(100);
+    }
+    check('đồng bộ nền: gợi ý có tài khoản thêm từ máy khác', synced);
+    await site.reload();
+    await ui.locator('.toast').waitFor({ state: 'visible', timeout: 10000 });
+    check('trang đăng nhập gợi ý tài khoản vừa đồng bộ', (await ui.locator('.toast').textContent()).includes('Từ máy khác'));
+    await ext.locator('li .item-title', { hasText: 'Từ máy khác' }).waitFor({ state: 'attached', timeout: 10000 });
+    check('cửa sổ KaiPass đang mở cũng thấy tài khoản đó', true);
+    check('đồng bộ nền không ghi đè file trên Drive khi không có gì mới', drive.state.rev === revBefore);
+
+    // Saving from the page in Drive mode uploads to Drive.
+    await site.goto(`http://localhost:${PORT}/signin`);
+    await site.locator('[name=email]').fill('gina');
+    await site.locator('[name=password]').fill('pw-gina');
+    await site.getByRole('button', { name: 'Sign in' }).click();
+    await site.waitForURL(/\/welcome$/);
+    await ui.locator('.save').waitFor({ state: 'visible', timeout: 10000 });
+    await ui.locator('.save').getByRole('button', { name: 'Lưu', exact: true }).click();
+    let uploaded = false;
+    for (let i = 0; i < 100 && !uploaded; i++) {
+      uploaded = drive.state.rev > revBefore;
+      if (!uploaded) await site.waitForTimeout(100);
+    }
+    const onDrive = uploaded
+      ? [...(await kdbxweb.Kdbx.load(new Uint8Array(drive.state.file).buffer, new kdbxweb.Credentials(kdbxweb.ProtectedValue.fromString(PW)))).getDefaultGroup().allEntries()].map((e) => e.fields.get('UserName'))
+      : [];
+    check('lưu từ trang khi dùng Drive: tải lên Drive, giữ cả mục của máy khác', onDrive.includes('gina') && onDrive.includes('frank'), onDrive.join());
 
     check('không có lỗi trong console', problems.length === 0, problems.join(' | '));
   } catch (e) {
