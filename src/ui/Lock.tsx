@@ -3,7 +3,7 @@ import { bioEnrolled, BioUnavailable, bioPassword, disableBio } from '../lib/bio
 import { forcedTabId, isPopup } from '../lib/platform';
 import { Session, type Meta } from '../lib/session';
 import { WrongPasswordError } from '../lib/vault';
-import { errorText, Icon, SecretInput } from './bits';
+import { Brand, errorText, Icon, SecretInput } from './bits';
 import { ForgotDialog } from './Forgot';
 
 const BIO_WINDOW = new URLSearchParams(location.search).has('bio');
@@ -93,36 +93,49 @@ export function Lock({
   return (
     <div className="center">
       <form className="panel" onSubmit={submit}>
-        <div className="brand">
-          <img src="./icon.svg" alt="" />
-          <h1>KaiPass</h1>
+        <div className="panel-head">
+          <Brand />
+          <span
+            className="badge"
+            data-tip={meta.mode === 'drive' ? 'Vault đồng bộ với Google Drive' : 'Vault chỉ lưu trên thiết bị này'}
+          >
+            <Icon name={meta.mode === 'drive' ? 'cloud' : 'device'} />
+            {meta.mode === 'drive' ? 'Google Drive' : 'Thiết bị này'}
+          </span>
         </div>
         {bio && (
-          <button type="button" className="primary bio" onClick={() => void useBio()} disabled={busy}>
-            <Icon name="finger" /> Mở khoá bằng vân tay / mật khẩu máy
-          </button>
+          <>
+            <button type="button" className="primary bio-btn" onClick={() => void useBio()} disabled={busy}>
+              <Icon name="finger" /> Mở khoá bằng vân tay / mật khẩu máy
+            </button>
+            <div className="or">hoặc</div>
+          </>
         )}
-        <SecretInput
-          label="Master password"
-          value={pw}
-          onChange={setPw}
-          autoFocus={!bio}
-          autoComplete="current-password"
-        />
-        <button className={bio ? undefined : 'primary'} disabled={busy || !pw}>
-          {busy ? 'Đang mở khoá…' : 'Mở khoá'}
-        </button>
+        <div className="unlock-row">
+          <SecretInput
+            label="Master password"
+            hideLabel
+            placeholder="Master password"
+            value={pw}
+            onChange={setPw}
+            autoFocus={!bio}
+            autoComplete="current-password"
+          />
+          <button className={`go${bio ? '' : ' primary'}`} disabled={busy || !pw} aria-label="Mở khoá" data-tip="Mở khoá">
+            <Icon name={busy ? 'clock' : 'arrow'} />
+          </button>
+        </div>
         {error && (
           <p className="error" role="alert">
-            {error}
+            <Icon name="alert" />
+            <span>{error}</span>
           </p>
         )}
-        <p className="muted small">
-          {meta.mode === 'drive' ? 'Vault đồng bộ với Google Drive.' : 'Vault chỉ lưu trên thiết bị này.'}
-        </p>
-        <button type="button" className="link" onClick={() => setForgot(true)}>
-          Quên master password?
-        </button>
+        <div className="panel-foot">
+          <button type="button" className="link subtle" onClick={() => setForgot(true)}>
+            Quên master password?
+          </button>
+        </div>
       </form>
       {forgot && (
         <ForgotDialog

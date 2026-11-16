@@ -78,7 +78,7 @@ declare const __KAIPASS_TEST__: boolean;
   :host { color-scheme: light dark; }
   * { box-sizing: border-box; font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   .badge { position: fixed; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
-    background: #175ddc; display: none; cursor: pointer; box-shadow: 0 1px 3px rgb(0 0 0 / 30%); }
+    background: #2f6bff; display: none; cursor: pointer; box-shadow: 0 1px 3px rgb(0 0 0 / 30%); }
   .badge svg { width: 100%; height: 100%; display: block; }
   .panel { position: fixed; display: none; min-width: 260px; max-width: 360px; max-height: 320px; overflow: auto;
     padding: 6px; border-radius: 10px; background: #fff; color: #1b2030; border: 1px solid #d9dee8;
@@ -86,22 +86,22 @@ declare const __KAIPASS_TEST__: boolean;
   .toast, .save { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
     background: #fff; color: #1b2030; border: 1px solid #d9dee8; box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
   .head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; font-weight: 600; }
-  .head .logo { width: 20px; height: 20px; border-radius: 5px; background: #175ddc; flex: none; }
+  .head .logo { width: 20px; height: 20px; border-radius: 5px; background: #2f6bff; flex: none; }
   .head .logo svg { width: 20px; height: 20px; display: block; }
   .head .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .head .sub { font-weight: 400; color: #5d667a; font-size: 12px; }
   button { cursor: pointer; }
   .row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px;
     background: transparent; color: inherit; text-align: left; }
-  .row:hover, .row:focus-visible { background: #e3ecfc; outline: none; }
+  .row:hover, .row:focus-visible { background: #e9f0ff; outline: none; }
   .avatar { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px;
-    background: #eef1f6; color: #175ddc; font-weight: 700; }
+    background: #eef1f6; color: #2f6bff; font-weight: 700; }
   .text { display: flex; flex-direction: column; min-width: 0; }
   .title, .user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .title { font-weight: 600; }
   .user { font-size: 12px; color: #5d667a; }
   .note { padding: 8px; color: #5d667a; }
-  .action { margin: 4px 8px 6px; padding: 7px 12px; border: 0; border-radius: 8px; background: #175ddc; color: #fff; font-weight: 600; }
+  .action { margin: 4px 8px 6px; padding: 7px 12px; border: 0; border-radius: 8px; background: #2f6bff; color: #fff; font-weight: 600; }
   .x { margin-left: auto; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #5d667a; font-size: 18px; line-height: 1; }
   .x:hover { background: #eef1f6; }
   .who { margin: 0 4px 10px; padding: 8px 10px; border-radius: 8px; background: #eef1f6; }

@@ -5,7 +5,7 @@ import { isExtension } from '../lib/platform';
 import { ForgotDialog } from './Forgot';
 import { FILE_NAME, Session } from '../lib/session';
 import { Vault } from '../lib/vault';
-import { errorText, Icon, passwordProblem, SecretInput, TextInput } from './bits';
+import { Brand, CopyBtn, errorText, Icon, IconButton, InfoTip, passwordProblem, SecretInput, TextInput } from './bits';
 
 const ENV_CLIENT_ID: string = GOOGLE_CLIENT_ID;
 const CLIENT_ID_KEY = 'kaipass.clientId';
@@ -24,10 +24,15 @@ export const needsClientId = !ENV_CLIENT_ID;
 export function RedirectHint() {
   if (!isExtension) return null;
   return (
-    <p className="muted small">
-      Trong Google Cloud Console, thêm địa chỉ này vào <strong>Authorized redirect URIs</strong> của
-      OAuth client: <code className="wrap">{Drive.extensionRedirect()}</code>
-    </p>
+    <details className="danger-zone hint">
+      <summary className="muted">
+        <Icon name="info" /> Redirect URI cho Google
+      </summary>
+      <div className="share-link">
+        <code className="wrap small">{Drive.extensionRedirect()}</code>
+        <CopyBtn value={Drive.extensionRedirect()} what="redirect URI" />
+      </div>
+    </details>
   );
 }
 
@@ -119,66 +124,66 @@ export function Setup({
 
   const creating = step.k === 'local' || step.k === 'drive-new';
 
+  const back = (
+    <IconButton icon="back" label="Quay lại" onClick={() => go({ k: 'choose' })} disabled={busy} />
+  );
+  const heading = (title: string) => (
+    <div className="step-head">
+      {back}
+      <h2>{title}</h2>
+    </div>
+  );
+
   return (
     <div className="center">
       <form className="panel" onSubmit={submit}>
-        <div className="brand">
-          <img src="./icon.svg" alt="" />
-          <h1>KaiPass</h1>
-        </div>
-
         {step.k === 'choose' && (
           <>
-            <p className="muted">
-              Mật khẩu, thẻ, giấy tờ của bạn được mã hoá ngay trên thiết bị này bằng master password. Nơi
-              lưu chỉ giữ file đã mã hoá.
-            </p>
-            <button type="button" className="choice" onClick={() => go({ k: 'drive' })}>
-              <strong>Lưu trên Google Drive</strong>
-              <span>Đồng bộ giữa máy tính và điện thoại. Chọn mục này nếu đã có vault trên Drive.</span>
-            </button>
-            <button type="button" className="choice" onClick={() => go({ k: 'local' })}>
-              <strong>Chỉ lưu trên thiết bị này</strong>
-              <span>Không đồng bộ. Có thể chuyển lên Google Drive sau.</span>
-            </button>
-            <button type="button" className="choice" onClick={() => go({ k: 'file' })}>
-              <strong>Mở file .kdbx có sẵn</strong>
-              <span>Dùng bản sao lưu hoặc file KeePass bạn đang có.</span>
-            </button>
+            <div className="panel-head">
+              <Brand />
+              <p className="panel-sub">
+                Mã hoá trên thiết bị của bạn <InfoTip text="Mật khẩu, thẻ, giấy tờ được mã hoá ngay trên máy bằng master password. Nơi lưu chỉ giữ file đã mã hoá." />
+              </p>
+            </div>
+            <div className="choices">
+              <Choice icon="cloud" title="Lưu trên Google Drive" sub="Đồng bộ mọi thiết bị" onClick={() => go({ k: 'drive' })} />
+              <Choice icon="device" title="Chỉ lưu trên thiết bị này" sub="Không đồng bộ" onClick={() => go({ k: 'local' })} />
+              <Choice icon="upload" title="Mở file .kdbx có sẵn" sub="Bản sao lưu hoặc file KeePass" onClick={() => go({ k: 'file' })} />
+            </div>
           </>
         )}
 
         {step.k === 'drive' && (
           <>
-            <h2>Kết nối Google Drive</h2>
+            {heading('Google Drive')}
+            <p className="muted small">
+              App chỉ thấy file do chính nó tạo <InfoTip text="KaiPass xin quyền drive.file: không đọc được file nào khác trong Drive của bạn." />
+            </p>
             {needsClientId && (
-              <>
-                <TextInput
-                  label="Google OAuth Client ID"
-                  value={clientId}
-                  onChange={setClientId}
-                  placeholder="1234567890-abc.apps.googleusercontent.com"
-                  autoFocus
-                  mono
-                />
-                <p className="muted small">
-                  Tạo miễn phí trong Google Cloud Console, xem hướng dẫn ở file README. App chỉ xin quyền
-                  với những file do chính nó tạo ra.
-                </p>
-              </>
+              <TextInput
+                label="Google OAuth Client ID"
+                hint="Tạo miễn phí trong Google Cloud Console, xem README."
+                value={clientId}
+                onChange={setClientId}
+                placeholder="1234567890-abc.apps.googleusercontent.com"
+                autoFocus
+                mono
+              />
             )}
-            <RedirectHint />
             <button className="primary" disabled={busy}>
-              {busy ? 'Đang kết nối…' : 'Đăng nhập Google'}
+              <Icon name="login" /> {busy ? 'Đang kết nối…' : 'Đăng nhập Google'}
             </button>
+            <RedirectHint />
           </>
         )}
 
         {step.k === 'drive-existing' && (
           <>
-            <h2>Đã tìm thấy vault trên Drive</h2>
+            {heading('Đã tìm thấy vault trên Drive')}
             <SecretInput
               label="Master password"
+              hideLabel
+              placeholder="Master password"
               value={pw}
               onChange={setPw}
               autoFocus
@@ -187,23 +192,22 @@ export function Setup({
             <button className="primary" disabled={busy || !pw}>
               {busy ? 'Đang mở…' : 'Mở vault'}
             </button>
-            <button type="button" className="link" onClick={() => setForgot(true)}>
-              Quên master password?
-            </button>
+            <div className="panel-foot">
+              <button type="button" className="link subtle" onClick={() => setForgot(true)}>
+                Quên master password?
+              </button>
+            </div>
           </>
         )}
 
         {step.k === 'file' && (
           <>
-            <h2>Mở file .kdbx</h2>
+            {heading('Mở file .kdbx')}
             <div className="field">
-              <label htmlFor="kdbx-file">File</label>
-              <input
-                id="kdbx-file"
-                type="file"
-                accept=".kdbx"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
+              <label htmlFor="kdbx-file" className="sr-only">
+                File
+              </label>
+              <input id="kdbx-file" type="file" accept=".kdbx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </div>
             <SecretInput label="Master password của file" value={pw} onChange={setPw} autoComplete="current-password" />
             <button className="primary" disabled={busy || !pw || !file}>
@@ -214,12 +218,12 @@ export function Setup({
 
         {creating && (
           <>
-            <h2>Tạo master password</h2>
+            {heading('Tạo master password')}
             <SecretInput label="Master password" value={pw} onChange={setPw} autoFocus autoComplete="new-password" />
             <SecretInput label="Nhập lại" value={confirm} onChange={setConfirm} autoComplete="new-password" />
             <p className="warn small">
-              Không ai khôi phục được master password. Quên là mất toàn bộ dữ liệu, nên hãy ghi lại và cất ở
-              nơi an toàn.
+              <Icon name="alert" />
+              <span>Quên là mất dữ liệu, trừ khi bạn tạo khoá khôi phục trong Cài đặt.</span>
             </p>
             <button className="primary" disabled={busy}>
               {busy ? 'Đang tạo…' : 'Tạo vault'}
@@ -229,13 +233,9 @@ export function Setup({
 
         {error && (
           <p className="error" role="alert">
-            {error}
+            <Icon name="alert" />
+            <span>{error}</span>
           </p>
-        )}
-        {step.k !== 'choose' && (
-          <button type="button" className="link" onClick={() => go({ k: 'choose' })} disabled={busy}>
-            <Icon name="back" /> Quay lại
-          </button>
         )}
       </form>
       {/* Outside the form above: the dialog has a form of its own. */}
@@ -250,5 +250,22 @@ export function Setup({
         />
       )}
     </div>
+  );
+}
+
+function Choice({ icon, title, sub, onClick }: { icon: string; title: string; sub: string; onClick: () => void }) {
+  return (
+    <button type="button" className="choice" onClick={onClick}>
+      <span className="choice-icon">
+        <Icon name={icon} />
+      </span>
+      <span className="choice-text">
+        <strong>{title}</strong>
+        <small>{sub}</small>
+      </span>
+      <span className="chev">
+        <Icon name="arrow" />
+      </span>
+    </button>
   );
 }

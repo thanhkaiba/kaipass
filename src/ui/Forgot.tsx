@@ -3,7 +3,7 @@ import { Drive } from '../lib/drive';
 import { disableBio } from '../lib/bio';
 import { findRecovery, recoverPassword, resealRecovery, type RecoveryRecord } from '../lib/recovery';
 import { storedVaultBytes, wipeDevice, type Meta, type Session } from '../lib/session';
-import { downloadBytes, errorText, Modal, passwordProblem, SecretInput, TextInput, useToast } from './bits';
+import { Brand, downloadBytes, errorText, Icon, InfoTip, Modal, passwordProblem, SecretInput, TextInput, useToast } from './bits';
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').trim().toUpperCase();
 
@@ -21,22 +21,28 @@ export function WipeSection({ mode, onWiped }: { mode: Meta['mode']; onWiped: ()
 
   return (
     <details className="danger-zone">
-      <summary>Xoá dữ liệu trên thiết bị này</summary>
+      <summary>
+        <Icon name="trash" />
+        <span>Xoá dữ liệu trên thiết bị này</span>
+      </summary>
       <div className="danger-body">
         {onlyCopy ? (
           <p className="warn small">
-            Vault này <strong>chỉ có trên thiết bị này</strong>. Xoá là mất hẳn mọi mật khẩu. Hãy tải bản sao lưu
-            trước: file vẫn được mã hoá, và mở lại được bằng master password (hoặc khoá khôi phục).
+            <Icon name="alert" />
+            <span>
+              Vault <strong>chỉ có trên thiết bị này</strong>: xoá là mất hẳn. Tải bản sao lưu trước.
+            </span>
           </p>
         ) : (
-          <p className="muted small">
-            Chỉ xoá bản sao trên thiết bị này. File trên Google Drive vẫn còn; đăng nhập Google lại là có vault.
+          <p className="note">
+            <Icon name="cloud" />
+            <span>Chỉ xoá bản trên máy này. Vault trên Google Drive vẫn còn.</span>
           </p>
         )}
-        <button type="button" onClick={() => void backup()}>
-          Tải bản sao lưu đã mã hoá (.kdbx)
+        <button type="button" onClick={() => void backup()} aria-label="Tải bản sao lưu đã mã hoá (.kdbx)" data-tip="File vẫn được mã hoá, mở lại bằng master password hoặc khoá khôi phục">
+          <Icon name="download" /> Tải bản sao lưu
         </button>
-        <TextInput label='Gõ "XOÁ" để xác nhận' value={typed} onChange={setTyped} />
+        <TextInput label='Gõ "XOÁ" để xác nhận' value={typed} onChange={setTyped} placeholder="XOÁ" />
         <button
           type="button"
           className="danger"
@@ -47,7 +53,7 @@ export function WipeSection({ mode, onWiped }: { mode: Meta['mode']; onWiped: ()
             onWiped();
           }}
         >
-          Xoá dữ liệu trên thiết bị này
+          <Icon name="trash" /> Xoá dữ liệu trên thiết bị này
         </button>
       </div>
     </details>
@@ -111,38 +117,46 @@ export function ForgotDialog({
   };
 
   return (
-    <Modal title="Quên master password" onClose={onClose}>
-      <p className="small">
-        KaiPass không gửi master password đi đâu, nên không ai (kể cả người làm ra app) lấy lại được. Cách duy
-        nhất là <strong>khoá khôi phục</strong>, nếu trước đó bạn đã tạo trong Cài đặt.
+    <Modal title="Quên master password" icon="key" onClose={onClose}>
+      <p className="note">
+        <Icon name="shield" />
+        <span>Master password không rời khỏi máy bạn nên không ai lấy lại được. Chỉ khoá khôi phục mở được vault.</span>
       </p>
       {busy && record === undefined && <p className="muted">Đang tìm khoá khôi phục…</p>}
       {record && (
         <form className="share-form" onSubmit={submit}>
-          <TextInput label="Khoá khôi phục" value={key} onChange={setKey} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" mono autoFocus />
+          <TextInput
+            label="Khoá khôi phục"
+            hint="30 ký tự bạn đã ghi lại khi tạo khoá khôi phục trong Cài đặt. Sau đó bạn sẽ đặt master password mới."
+            value={key}
+            onChange={setKey}
+            placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
+            mono
+            autoFocus
+          />
           <button className="primary" disabled={busy || !key.trim()}>
             {busy ? 'Đang khôi phục…' : 'Khôi phục'}
           </button>
-          <p className="muted small">Sau khi khôi phục, bạn sẽ đặt master password mới.</p>
         </form>
       )}
       {record === null && (
         <div className="share-form">
-          <p className="warn small">Không tìm thấy khoá khôi phục{drive && !givenDrive ? ' trên thiết bị này' : ''}.</p>
+          <p className="warn small">
+            <Icon name="alert" />
+            <span>Không tìm thấy khoá khôi phục{drive && !givenDrive ? ' trên thiết bị này' : ''}.</span>
+            <InfoTip text="Nếu một thiết bị khác vẫn mở được KaiPass (chưa khoá, hoặc mở bằng vân tay), vào Cài đặt → Bảo mật → Master password ở thiết bị đó để đổi." />
+          </p>
           {drive && !givenDrive && (
             <button type="button" onClick={() => void look(true)} disabled={busy}>
-              Tìm trên Google Drive
+              <Icon name="cloud" /> Tìm trên Google Drive
             </button>
           )}
-          <p className="muted small">
-            Nếu một thiết bị khác vẫn mở được KaiPass (chưa khoá, hoặc mở bằng vân tay), hãy vào Cài đặt → Đổi master
-            password ở thiết bị đó.
-          </p>
         </div>
       )}
       {error && (
         <p className="error" role="alert">
-          {error}
+          <Icon name="alert" />
+          <span>{error}</span>
         </p>
       )}
       {onWiped && <WipeSection mode={meta.mode} onWiped={onWiped} />}
@@ -179,17 +193,19 @@ export function ResetPassword({ session, onDone }: { session: Session; onDone: (
   return (
     <div className="center">
       <form className="panel" onSubmit={submit}>
-        <div className="brand">
-          <img src="./icon.svg" alt="" />
-          <h1>KaiPass</h1>
+        <div className="panel-head">
+          <Brand />
+          <h2>Đặt master password mới</h2>
+          <p className="panel-sub">
+            Đã mở bằng khoá khôi phục <InfoTip text="Khoá khôi phục vẫn dùng được cho lần sau." />
+          </p>
         </div>
-        <h2>Đặt master password mới</h2>
-        <p className="muted small">Đã mở vault bằng khoá khôi phục. Khoá khôi phục vẫn dùng được cho lần sau.</p>
         <SecretInput label="Master password mới" value={pw} onChange={setPw} autoFocus autoComplete="new-password" />
         <SecretInput label="Nhập lại" value={confirm} onChange={setConfirm} autoComplete="new-password" />
         {error && (
           <p className="error" role="alert">
-            {error}
+            <Icon name="alert" />
+            <span>{error}</span>
           </p>
         )}
         <button className="primary" disabled={busy}>

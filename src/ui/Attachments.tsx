@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item, Vault } from '../lib/vault';
-import { downloadBytes, formatSize, Icon, Modal } from './bits';
+import { downloadBytes, formatSize, Icon, IconButton, Modal } from './bits';
 
 type Kind = 'image' | 'pdf' | 'text';
 
@@ -103,7 +103,7 @@ function Viewer({
   };
 
   return (
-    <Modal title={name} onClose={onClose} wide>
+    <Modal title={name} icon={kind === 'pdf' ? 'pdf' : kind === 'image' ? 'image' : 'note'} onClose={onClose} wide>
       <div className="viewer" data-testid="viewer">
         {kind === 'image' && <img src={urls.get(name)} alt={name} data-testid="viewer-image" />}
         {kind === 'pdf' && (
@@ -114,26 +114,20 @@ function Viewer({
       <div className="viewer-bar">
         {names.length > 1 && (
           <>
-            <button type="button" className="iconbtn" onClick={() => step(-1)} aria-label="File trước">
-              <Icon name="back" />
-            </button>
+            <IconButton icon="back" label="File trước" onClick={() => step(-1)} />
             <span className="muted small">
               {index + 1} / {names.length}
             </span>
-            <button type="button" className="iconbtn flip" onClick={() => step(1)} aria-label="File sau">
-              <Icon name="back" />
-            </button>
+            <IconButton icon="back" label="File sau" className="flip" onClick={() => step(1)} />
           </>
         )}
         <span className="grow" />
         {kind === 'pdf' && (
-          <a className="iconbtn" href={urls.get(name)} target="_blank" rel="noopener" title="Mở trong tab mới" aria-label="Mở trong tab mới">
+          <a className="iconbtn" href={urls.get(name)} target="_blank" rel="noopener" data-tip="Mở trong tab mới" aria-label="Mở trong tab mới">
             <Icon name="external" />
           </a>
         )}
-        <button type="button" onClick={download}>
-          <Icon name="download" /> Tải về
-        </button>
+        <IconButton icon="download" label="Tải về" onClick={download} />
       </div>
     </Modal>
   );
@@ -189,29 +183,18 @@ export function Attachments({
               )}
               <div className="muted small">{formatSize(a.size)}</div>
             </div>
-            <button
-              type="button"
-              className="iconbtn"
-              title="Tải về"
-              aria-label={`Tải ${a.name}`}
-              onClick={() => {
-                const data = vault.attachment(item.id, a.name);
-                if (data) downloadBytes(a.name, data as BlobPart, mime(a.name));
-              }}
-            >
-              <Icon name="download" />
-            </button>
-            {!item.trashed && (
-              <button
-                type="button"
-                className="iconbtn"
-                title="Gỡ file"
-                aria-label={`Gỡ ${a.name}`}
-                onClick={() => onRemove(a.name)}
-              >
-                <Icon name="x" />
-              </button>
-            )}
+            <div className="row-actions">
+              <IconButton
+                icon="download"
+                label={`Tải ${a.name}`}
+                tip="Tải về"
+                onClick={() => {
+                  const data = vault.attachment(item.id, a.name);
+                  if (data) downloadBytes(a.name, data as BlobPart, mime(a.name));
+                }}
+              />
+              {!item.trashed && <IconButton icon="x" tone="danger" label={`Gỡ ${a.name}`} tip="Gỡ file" onClick={() => onRemove(a.name)} />}
+            </div>
           </div>
         );
       })}

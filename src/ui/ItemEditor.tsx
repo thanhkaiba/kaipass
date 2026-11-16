@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { normalizeOtp } from '../lib/totp';
 import type { Folder, ItemDraft, ItemField } from '../lib/vault';
-import { errorText, Generator, Icon, SecretInput, TextInput } from './bits';
+import { Avatar, errorText, Generator, Icon, IconButton, SecretInput, TextInput } from './bits';
 import { TYPE_LABEL } from './types';
 
 export function ItemEditor({
@@ -45,73 +45,85 @@ export function ItemEditor({
   return (
     <form className="detail editor" onSubmit={submit}>
       <header className="detail-head">
-        <h2>{initial.id ? 'Sửa' : 'Thêm'}: {TYPE_LABEL[d.type]}</h2>
+        <Avatar title={d.title} icon={d.type} size={48} />
+        <div className="detail-title">
+          <h2>{d.title.trim() || (initial.id ? 'Sửa' : `${TYPE_LABEL[d.type]} mới`)}</h2>
+          <div className="detail-meta">
+            <span className="tag">
+              <Icon name={d.type} size={13} /> {TYPE_LABEL[d.type]}
+            </span>
+          </div>
+        </div>
         <div className="actions">
+          <IconButton
+            icon="star"
+            label="Yêu thích"
+            tone={d.favorite ? 'star' : undefined}
+            filled={d.favorite}
+            pressed={d.favorite}
+            onClick={() => set({ favorite: !d.favorite })}
+          />
           <button type="button" onClick={onCancel} disabled={busy}>
             Huỷ
           </button>
           <button className="primary" disabled={busy}>
-            {busy ? 'Đang lưu…' : 'Lưu'}
+            <Icon name="check" /> {busy ? 'Đang lưu…' : 'Lưu'}
           </button>
         </div>
       </header>
       {error && (
         <p className="error" role="alert">
-          {error}
+          <Icon name="alert" />
+          <span>{error}</span>
         </p>
       )}
 
-      <TextInput label="Tên" value={d.title} onChange={(title) => set({ title })} autoFocus={!initial.id} />
-
-      {d.type === 'login' && (
-        <>
-          <TextInput label="Tên đăng nhập" value={d.username} onChange={(username) => set({ username })} />
-          <SecretInput
-            label="Mật khẩu"
-            value={d.password}
-            onChange={(password) => set({ password })}
-            autoComplete="new-password"
-            mono
-            extra={
-              <button
-                type="button"
-                className="iconbtn"
-                onClick={() => setGen(!gen)}
-                title="Tạo mật khẩu"
-                aria-label="Tạo mật khẩu"
-              >
-                <Icon name="dice" />
-              </button>
-            }
-          />
-          {gen && (
-            <Generator
-              onUse={(password) => {
-                set({ password });
-                setGen(false);
-              }}
+      <section className="card">
+        <TextInput label="Tên" value={d.title} onChange={(title) => set({ title })} autoFocus={!initial.id} />
+        {d.type === 'login' && (
+          <>
+            <TextInput label="Tên đăng nhập" value={d.username} onChange={(username) => set({ username })} />
+            <SecretInput
+              label="Mật khẩu"
+              value={d.password}
+              onChange={(password) => set({ password })}
+              autoComplete="new-password"
+              mono
+              extra={<IconButton icon="dice" label="Tạo mật khẩu" pressed={gen} onClick={() => setGen(!gen)} />}
             />
-          )}
-          <TextInput label="Địa chỉ web" value={d.url} onChange={(url) => set({ url })} placeholder="https://" />
-          <SecretInput
-            label="Mã bí mật OTP (dán chuỗi otpauth:// hoặc secret key)"
-            value={d.otp}
-            onChange={(otp) => set({ otp })}
-            mono
-          />
-        </>
-      )}
+            {gen && (
+              <Generator
+                onUse={(password) => {
+                  set({ password });
+                  setGen(false);
+                }}
+              />
+            )}
+            <TextInput label="Địa chỉ web" value={d.url} onChange={(url) => set({ url })} placeholder="https://" />
+            <SecretInput
+              label="Mã bí mật OTP"
+              hint="Dán chuỗi otpauth://… hoặc secret key (chuỗi chữ và số) mà trang web đưa khi bật xác thực hai bước."
+              value={d.otp}
+              onChange={(otp) => set({ otp })}
+              mono
+            />
+          </>
+        )}
+      </section>
 
-      <fieldset className="custom">
-        <legend>{d.type === 'login' ? 'Trường khác' : 'Thông tin'}</legend>
+      <section className="card">
+        <div className="label-row">
+          <h3 className="grow">{d.type === 'login' ? 'Trường khác' : 'Thông tin'}</h3>
+          <IconButton
+            icon="plus"
+            label="Thêm trường"
+            onClick={() => set({ fields: [...d.fields, { name: '', value: '', secret: false }] })}
+          />
+        </div>
+        {d.fields.length === 0 && <p className="muted small">Ví dụ: câu hỏi bảo mật, mã PIN, số tài khoản…</p>}
         {d.fields.map((f, i) => (
           <div className="custom-row" key={i}>
-            <input
-              aria-label="Tên trường"
-              placeholder="Tên trường"
-              value={f.name}
-              onChange={(e) => setField(i, { name: e.target.value })}
-            />
+            <input aria-label="Tên trường" placeholder="Tên trường" value={f.name} onChange={(e) => setField(i, { name: e.target.value })} />
             <input
               aria-label={`Giá trị ${f.name}`}
               placeholder="Giá trị"
@@ -122,60 +134,43 @@ export function ItemEditor({
               value={f.value}
               onChange={(e) => setField(i, { value: e.target.value })}
             />
-            <button
-              type="button"
-              className={`iconbtn${f.secret ? ' on' : ''}`}
-              title={f.secret ? 'Đang ẩn giá trị' : 'Đang hiện giá trị'}
-              aria-label="Ẩn giá trị"
-              aria-pressed={f.secret}
+            <IconButton
+              icon={f.secret ? 'eyeOff' : 'eye'}
+              label="Ẩn giá trị"
+              tip={f.secret ? 'Đang ẩn (bấm để hiện)' : 'Đang hiện (bấm để ẩn)'}
+              pressed={f.secret}
               onClick={() => setField(i, { secret: !f.secret })}
-            >
-              <Icon name={f.secret ? 'eyeOff' : 'eye'} />
-            </button>
-            <button
-              type="button"
-              className="iconbtn"
-              title="Bỏ trường"
-              aria-label="Bỏ trường"
-              onClick={() => set({ fields: d.fields.filter((_, j) => j !== i) })}
-            >
-              <Icon name="x" />
-            </button>
+            />
+            <IconButton icon="x" tone="danger" label="Bỏ trường" onClick={() => set({ fields: d.fields.filter((_, j) => j !== i) })} />
           </div>
         ))}
-        <button
-          type="button"
-          className="link"
-          onClick={() => set({ fields: [...d.fields, { name: '', value: '', secret: false }] })}
-        >
-          <Icon name="plus" /> Thêm trường
-        </button>
-      </fieldset>
+      </section>
 
-      <div className="field">
-        <label htmlFor="notes">Ghi chú</label>
-        <textarea id="notes" rows={5} value={d.notes} onChange={(e) => set({ notes: e.target.value })} />
-      </div>
-
-      <div className="two">
+      <section className="card">
         <div className="field">
-          <label htmlFor="folder">Thư mục</label>
-          <select id="folder" value={d.folderId} onChange={(e) => set({ folderId: e.target.value })}>
-            <option value="">(không có)</option>
-            {folders.map((f) => (
-              <option key={f.id} value={f.id}>
-                {'  '.repeat(f.depth)}
-                {f.name}
-              </option>
-            ))}
-          </select>
+          <label htmlFor="notes" className="row-label">
+            Ghi chú
+          </label>
+          <textarea id="notes" rows={4} value={d.notes} onChange={(e) => set({ notes: e.target.value })} />
         </div>
-        <TextInput label="Nhãn (cách nhau bằng dấu phẩy)" value={tags} onChange={setTags} />
-      </div>
-      <label className="check">
-        <input type="checkbox" checked={d.favorite} onChange={(e) => set({ favorite: e.target.checked })} />
-        Yêu thích
-      </label>
+        <div className="two">
+          <div className="field">
+            <label htmlFor="folder" className="row-label">
+              Thư mục
+            </label>
+            <select id="folder" value={d.folderId} onChange={(e) => set({ folderId: e.target.value })}>
+              <option value="">(không có)</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {'\u00a0\u00a0'.repeat(f.depth)}
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <TextInput label="Nhãn" hint="Cách nhau bằng dấu phẩy" value={tags} onChange={setTags} placeholder="công việc, ngân hàng" />
+        </div>
+      </section>
     </form>
   );
 }

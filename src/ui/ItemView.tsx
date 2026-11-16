@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import type { Drive } from '../lib/drive';
 import type { Item, Vault } from '../lib/vault';
-import { ShareDialog } from './Share';
 import { Attachments } from './Attachments';
-import { CopyBtn, formatSize, Icon, OtpCode, useToast } from './bits';
+import { Avatar, CopyBtn, formatSize, Icon, IconButton, OtpCode, useToast } from './bits';
+import { ShareDialog } from './Share';
 import { fieldLabel, TYPE_LABEL } from './types';
 
 function Row({ label, value, secret, link }: { label: string; value: string; secret?: boolean; link?: boolean }) {
@@ -15,26 +15,25 @@ function Row({ label, value, secret, link }: { label: string; value: string; sec
       <div className="row-main">
         <div className="row-label">{label}</div>
         <div className={`row-value${secret ? ' mono' : ''}`}>
-          {secret && !show ? '••••••••••' : value}
+          {secret && !show ? '••••••••••' : href ? <a href={href} target="_blank" rel="noopener noreferrer">{value}</a> : value}
         </div>
       </div>
-      {secret && (
-        <button
-          type="button"
-          className="iconbtn"
-          onClick={() => setShow(!show)}
-          title={show ? 'Ẩn' : 'Hiện'}
-          aria-label={`${show ? 'Ẩn' : 'Hiện'} ${label}`}
-        >
-          <Icon name={show ? 'eyeOff' : 'eye'} />
-        </button>
-      )}
-      {href && (
-        <a className="iconbtn" href={href} target="_blank" rel="noopener noreferrer" title="Mở trang" aria-label="Mở trang">
-          <Icon name="external" />
-        </a>
-      )}
-      <CopyBtn value={value} secret={secret} what={label.toLowerCase()} />
+      <div className="row-actions">
+        {secret && (
+          <IconButton
+            icon={show ? 'eyeOff' : 'eye'}
+            label={`${show ? 'Ẩn' : 'Hiện'} ${label}`}
+            tip={show ? 'Ẩn' : 'Hiện'}
+            onClick={() => setShow(!show)}
+          />
+        )}
+        {href && (
+          <a className="iconbtn" href={href} target="_blank" rel="noopener noreferrer" aria-label="Mở trang" data-tip="Mở trang">
+            <Icon name="external" />
+          </a>
+        )}
+        <CopyBtn value={value} secret={secret} what={label.toLowerCase()} />
+      </div>
     </div>
   );
 }
@@ -76,18 +75,25 @@ export function ItemView({
     if (fileInput.current) fileInput.current.value = '';
   };
 
+  const hasMain = item.username || item.password || item.otp || item.url || item.fields.length > 0;
+
   return (
     <div className="detail">
       <header className="detail-head">
-        <button type="button" className="iconbtn only-narrow" onClick={onBack} aria-label="Quay lại danh sách">
-          <Icon name="back" />
-        </button>
+        <IconButton icon="back" label="Quay lại danh sách" className="only-narrow" onClick={onBack} />
+        <Avatar title={item.title} icon={item.type} size={48} />
         <div className="detail-title">
           <h2>{item.title || '(không tên)'}</h2>
-          <span className="muted small">
-            {TYPE_LABEL[item.type]}
-            {item.folderName && ` · ${item.folderName}`}
-          </span>
+          <div className="detail-meta">
+            <span className="tag">
+              <Icon name={item.type} size={13} /> {TYPE_LABEL[item.type]}
+            </span>
+            {item.folderName && (
+              <span className="tag">
+                <Icon name="folder" size={13} /> {item.folderName}
+              </span>
+            )}
+          </div>
         </div>
         <div className="actions">
           {item.trashed ? (
@@ -95,59 +101,44 @@ export function ItemView({
               <button type="button" onClick={() => change(() => vault.restore(item.id))}>
                 <Icon name="restore" /> Khôi phục
               </button>
-              <button
-                type="button"
-                className="danger"
+              <IconButton
+                icon="trash"
+                tone="danger"
+                label="Xoá hẳn"
                 onClick={() =>
-                  window.confirm(`Xoá hẳn "${item.title}"? Không khôi phục được.`) &&
-                  change(() => vault.remove(item.id))
+                  window.confirm(`Xoá hẳn "${item.title}"? Không khôi phục được.`) && void change(() => vault.remove(item.id))
                 }
-              >
-                <Icon name="trash" /> Xoá hẳn
-              </button>
+              />
             </>
           ) : (
             <>
-              <button
-                type="button"
-                className={`iconbtn${item.favorite ? ' fav' : ''}`}
-                title={item.favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
-                aria-label="Yêu thích"
-                aria-pressed={item.favorite}
-                onClick={() => change(() => vault.setFavorite(item.id, !item.favorite))}
-              >
-                <Icon name="star" filled={item.favorite} />
-              </button>
-              <button
-                type="button"
-                className="iconbtn"
-                title="Chia sẻ"
-                aria-label="Chia sẻ"
-                onClick={() => setSharing(true)}
-              >
-                <Icon name="share" />
-              </button>
-              <button
-                type="button"
-                className="iconbtn"
-                title="Chuyển vào thùng rác"
-                aria-label="Chuyển vào thùng rác"
-                onClick={() => change(() => vault.remove(item.id)).then(() => toast('Đã chuyển vào thùng rác'))}
-              >
-                <Icon name="trash" />
-              </button>
+              <IconButton
+                icon="star"
+                label="Yêu thích"
+                tip={item.favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+                tone={item.favorite ? 'star' : undefined}
+                filled={item.favorite}
+                pressed={item.favorite}
+                onClick={() => void change(() => vault.setFavorite(item.id, !item.favorite))}
+              />
+              <IconButton icon="share" label="Chia sẻ" onClick={() => setSharing(true)} />
+              <IconButton
+                icon="trash"
+                tone="danger"
+                label="Chuyển vào thùng rác"
+                onClick={() => void change(() => vault.remove(item.id)).then(() => toast('Đã chuyển vào thùng rác'))}
+              />
               {onFill ? (
                 <>
-                  <button type="button" className="iconbtn" onClick={onEdit} title="Sửa" aria-label="Sửa">
-                    <Icon name="edit" />
-                  </button>
+                  <IconButton icon="edit" label="Sửa" onClick={onEdit} />
                   <button type="button" className="primary" onClick={onFill}>
                     Điền vào trang
                   </button>
                 </>
               ) : (
-                <button type="button" className="primary" onClick={onEdit}>
-                  <Icon name="edit" /> Sửa
+                <button type="button" className="primary" onClick={onEdit} aria-label="Sửa" data-tip="Sửa">
+                  <Icon name="edit" />
+                  <span className="hide-narrow">Sửa</span>
                 </button>
               )}
             </>
@@ -155,26 +146,23 @@ export function ItemView({
         </div>
       </header>
 
-      <section className="card">
-        <Row label="Tên đăng nhập" value={item.username} />
-        <Row label="Mật khẩu" value={item.password} secret />
-        {item.otp && (
-          <div className="row">
-            <div className="row-main">
-              <div className="row-label">Mã OTP</div>
-              <OtpCode uri={item.otp} />
-            </div>
-          </div>
-        )}
-        <Row label="Địa chỉ web" value={item.url} link />
-        {item.fields.map((f) => (
-          <Row key={f.name} label={fieldLabel(f.name)} value={f.value} secret={f.secret} link={!f.secret} />
-        ))}
-      </section>
-
-      {item.otp && (
+      {hasMain && (
         <section className="card">
-          <Row label="Mã bí mật OTP" value={item.otp} secret />
+          <Row label="Tên đăng nhập" value={item.username} />
+          <Row label="Mật khẩu" value={item.password} secret />
+          {item.otp && (
+            <div className="row">
+              <div className="row-main">
+                <div className="row-label">Mã OTP</div>
+                <OtpCode uri={item.otp} />
+              </div>
+            </div>
+          )}
+          <Row label="Địa chỉ web" value={item.url} link />
+          {item.fields.map((f) => (
+            <Row key={f.name} label={fieldLabel(f.name)} value={f.value} secret={f.secret} link={!f.secret} />
+          ))}
+          {item.otp && <Row label="Mã bí mật OTP" value={item.otp} secret />}
         </section>
       )}
 
@@ -185,37 +173,29 @@ export function ItemView({
               <div className="row-label">Ghi chú</div>
               <div className="row-value notes">{item.notes}</div>
             </div>
-            <CopyBtn value={item.notes} what="ghi chú" />
+            <div className="row-actions">
+              <CopyBtn value={item.notes} what="ghi chú" />
+            </div>
           </div>
         </section>
       )}
 
       <section className="card">
-        <div className="row">
-          <div className="row-main">
-            <div className="row-label">File đính kèm</div>
-            {item.attachments.length === 0 && <div className="muted small">Chưa có file nào</div>}
-          </div>
-          {!item.trashed && (
-            <button type="button" onClick={() => fileInput.current?.click()}>
-              <Icon name="clip" /> Đính kèm
-            </button>
-          )}
-          <input
-            ref={fileInput}
-            type="file"
-            multiple
-            hidden
-            data-testid="attach-input"
-            onChange={(e) => void attach(e.target.files)}
-          />
+        <div className="card-title">
+          <h3>File đính kèm</h3>
+          {item.attachments.length > 0 && <span className="count">{item.attachments.length}</span>}
+          {!item.trashed && <IconButton icon="clip" label="Đính kèm file" onClick={() => fileInput.current?.click()} />}
+          <input ref={fileInput} type="file" multiple hidden data-testid="attach-input" onChange={(e) => void attach(e.target.files)} />
         </div>
+        {item.attachments.length === 0 && (
+          <button type="button" className="dropzone" onClick={() => fileInput.current?.click()} disabled={item.trashed}>
+            <Icon name="upload" /> Thêm file
+          </button>
+        )}
         <Attachments
           item={item}
           vault={vault}
-          onRemove={(name) =>
-            window.confirm(`Gỡ file "${name}"?`) && void change(() => vault.removeAttachment(item.id, name))
-          }
+          onRemove={(name) => window.confirm(`Gỡ file "${name}"?`) && void change(() => vault.removeAttachment(item.id, name))}
         />
       </section>
 
@@ -223,13 +203,14 @@ export function ItemView({
         <div className="tags">
           {item.tags.map((t) => (
             <span className="tag" key={t}>
-              {t}
+              # {t}
             </span>
           ))}
         </div>
       )}
-      <p className="muted small">
-        Sửa lần cuối {item.modified ? new Date(item.modified).toLocaleString('vi-VN') : '—'}
+      <p className="meta-foot">
+        <Icon name="clock" />
+        {item.modified ? new Date(item.modified).toLocaleString('vi-VN') : '—'}
       </p>
       {sharing && <ShareDialog item={item} drive={drive} onClose={() => setSharing(false)} />}
     </div>

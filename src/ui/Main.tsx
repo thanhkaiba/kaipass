@@ -4,7 +4,7 @@ import { isExtension, isPopup } from '../lib/platform';
 import { autoLockMinutes } from '../lib/prefs';
 import type { Session, SyncStatus } from '../lib/session';
 import type { Item, ItemDraft, ItemType } from '../lib/vault';
-import { copyText, errorText, Icon, useToast } from './bits';
+import { Avatar, Brand, copyText, errorText, Icon, IconButton, useToast } from './bits';
 import { ItemEditor } from './ItemEditor';
 import { ItemView } from './ItemView';
 import { pushRecovery } from '../lib/recovery';
@@ -21,13 +21,23 @@ type Filter =
   | { k: 'trash' };
 
 const SYNC_LABEL: Record<SyncStatus, string> = {
-  local: 'Chỉ trên thiết bị này',
+  local: 'Chỉ trên máy này',
   synced: 'Đã đồng bộ',
   syncing: 'Đang đồng bộ…',
   pending: 'Chờ đồng bộ',
-  auth: 'Đăng nhập Google để đồng bộ',
+  auth: 'Cần đăng nhập Google',
   offline: 'Ngoại tuyến',
-  error: 'Lỗi đồng bộ, bấm để thử lại',
+  error: 'Lỗi đồng bộ',
+};
+
+const SYNC_TIP: Record<SyncStatus, string> = {
+  local: 'Vault chỉ lưu trên thiết bị này. Chuyển lên Google Drive trong Cài đặt.',
+  synced: 'Đã đồng bộ với Google Drive. Bấm để đồng bộ lại.',
+  syncing: 'Đang đồng bộ với Google Drive',
+  pending: 'Có thay đổi chưa lên Drive. Bấm để đồng bộ ngay.',
+  auth: 'Phiên Google đã hết. Bấm để đăng nhập lại.',
+  offline: 'Không kết nối được. Thay đổi sẽ lên Drive khi có mạng.',
+  error: 'Lỗi đồng bộ. Bấm để thử lại.',
 };
 
 function matches(item: Item, filter: Filter): boolean {
@@ -232,30 +242,50 @@ export function Main({
 
   const navItem = (f: Filter, icon: string, label: string, depth = 0) => {
     const active = JSON.stringify(f) === JSON.stringify(filter);
+    const n = count(f);
     return (
       <button
         type="button"
         key={JSON.stringify(f)}
         className={`nav-item${active ? ' active' : ''}`}
-        style={depth ? { paddingLeft: 12 + depth * 14 } : undefined}
+        style={depth ? { paddingLeft: 10 + depth * 14 } : undefined}
         onClick={() => pick(f)}
       >
-        <Icon name={icon} />
+        <Icon name={icon} filled={icon === 'star' && active} />
         <span className="grow">{label}</span>
-        <span className="count">{count(f)}</span>
+        {n > 0 && <span className="count">{n}</span>}
       </button>
     );
   };
 
+  const open = (i: Item) => {
+    setSelected(i.id);
+    setDraft(null);
+    setPane('detail');
+  };
+
+  const itemButton = (i: Item, active: boolean) => (
+    <button type="button" className={`item${active ? ' active' : ''}`} onClick={() => open(i)}>
+      <Avatar title={i.title} icon={i.type} />
+      <span className="item-text">
+        <span className="item-title">{i.title || '(không tên)'}</span>
+        <span className="item-sub">{subtitle(i)}</span>
+      </span>
+      {i.favorite && (
+        <span className="fav">
+          <Icon name="star" filled />
+        </span>
+      )}
+    </button>
+  );
+
   return (
     <div className={`app pane-${pane}`}>
       <nav className="sidebar" aria-label="Bộ lọc">
-        <div className="brand small-brand">
-          <img src="./icon.svg" alt="" />
-          <strong>KaiPass</strong>
-          <button type="button" className="iconbtn only-narrow push" onClick={() => setPane('list')} aria-label="Đóng">
-            <Icon name="x" />
-          </button>
+        <div className="step-head">
+          <Brand small />
+          <span className="grow" />
+          <IconButton icon="x" label="Đóng" className="only-narrow" onClick={() => setPane('list')} />
         </div>
         {navItem({ k: 'all' }, 'all', 'Tất cả')}
         {navItem({ k: 'fav' }, 'star', 'Yêu thích')}
@@ -263,59 +293,54 @@ export function Main({
         {TYPES.map((t) => navItem({ k: 'type', type: t }, t, TYPE_LABEL[t]))}
         <div className="nav-title">
           Thư mục
-          <button type="button" className="iconbtn" onClick={addFolder} title="Thêm thư mục" aria-label="Thêm thư mục">
-            <Icon name="plus" />
-          </button>
+          <IconButton icon="plus" label="Thêm thư mục" onClick={addFolder} />
         </div>
         {folders.map((f) => navItem({ k: 'folder', id: f.id }, 'folder', f.name, f.depth))}
         <div className="nav-gap" />
         {navItem({ k: 'trash' }, 'trash', 'Thùng rác')}
         <div className="grow" />
-        <button
-          type="button"
-          className={`sync sync-${session.status}`}
-          title={session.error || SYNC_LABEL[session.status]}
-          data-testid="sync-status"
-          data-status={session.status}
-          onClick={() => void session.sync(true)}
-          disabled={session.status === 'local' || session.status === 'syncing'}
-        >
-          <span className="dot" />
-          {SYNC_LABEL[session.status]}
-        </button>
-        <button type="button" className="nav-item" onClick={() => setSettings(true)}>
-          <Icon name="settings" />
-          <span className="grow">Cài đặt</span>
-        </button>
-        <button type="button" className="nav-item" onClick={() => onLock(session)}>
-          <Icon name="lock" />
-          <span className="grow">Khoá</span>
-        </button>
+        <div className="side-foot">
+          <button
+            type="button"
+            className={`sync sync-${session.status}`}
+            data-tip={session.error || SYNC_TIP[session.status]}
+            data-testid="sync-status"
+            data-status={session.status}
+            onClick={() => void session.sync(true)}
+            disabled={session.status === 'local' || session.status === 'syncing'}
+          >
+            <span className="dot" />
+            <span>{SYNC_LABEL[session.status]}</span>
+          </button>
+          <IconButton icon="settings" label="Cài đặt" onClick={() => setSettings(true)} />
+          <IconButton icon="lock" label="Khoá" onClick={() => onLock(session)} />
+        </div>
       </nav>
 
       <section className="list" aria-label="Danh sách">
         <div className="list-head">
-          <button type="button" className="iconbtn only-narrow" onClick={() => setPane('nav')} aria-label="Mở bộ lọc">
-            <Icon name="menu" />
-          </button>
+          <IconButton icon="menu" label="Mở bộ lọc" className="only-narrow" onClick={() => setPane('nav')} />
           <div className="search">
             <Icon name="search" />
             <input
               type="search"
-              placeholder={`Tìm trong ${heading.toLowerCase()}`}
+              placeholder="Tìm kiếm"
               aria-label="Tìm kiếm"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          {isPopup && (
-            <button type="button" className="iconbtn" onClick={openInTab} title="Mở trong tab" aria-label="Mở trong tab">
-              <Icon name="external" />
-            </button>
-          )}
+          {isPopup && <IconButton icon="external" label="Mở trong tab" onClick={openInTab} />}
           <div className="menu-wrap">
-            <button type="button" className="primary" onClick={() => setAdding(!adding)} aria-expanded={adding}>
-              <Icon name="plus" /> Thêm
+            <button
+              type="button"
+              className="primary add-btn"
+              onClick={() => setAdding(!adding)}
+              aria-expanded={adding}
+              aria-label="Thêm"
+              data-tip="Thêm mục mới"
+            >
+              <Icon name="plus" />
             </button>
             {adding && (
               <div className="menu" role="menu">
@@ -324,6 +349,7 @@ export function Main({
                     <Icon name={t} /> {TYPE_LABEL[t]}
                   </button>
                 ))}
+                <hr />
                 <button
                   type="button"
                   role="menuitem"
@@ -332,7 +358,7 @@ export function Main({
                     setImporting(true);
                   }}
                 >
-                  <Icon name="share" /> Từ link chia sẻ…
+                  <Icon name="link" /> Từ link chia sẻ…
                 </button>
               </div>
             )}
@@ -341,28 +367,14 @@ export function Main({
 
         {tab && !query && (
           <div className="suggest" data-testid="suggestions">
-            <div className="suggest-title">Cho trang {tab.host}</div>
-            {suggestions.length === 0 && <p className="muted small">Chưa có đăng nhập nào lưu cho trang này.</p>}
+            <div className="suggest-title">
+              <Icon name="login" /> {tab.host}
+            </div>
+            {suggestions.length === 0 && <p className="muted small">Chưa có đăng nhập cho trang này</p>}
             {suggestions.map((i) => (
               <div className="suggest-row" key={i.id}>
-                <button
-                  type="button"
-                  className="item"
-                  onClick={() => {
-                    setSelected(i.id);
-                    setDraft(null);
-                    setPane('detail');
-                  }}
-                >
-                  <span className="avatar">
-                    <Icon name={i.type} />
-                  </span>
-                  <span className="item-text">
-                    <span className="item-title">{i.title || '(không tên)'}</span>
-                    <span className="item-sub">{subtitle(i)}</span>
-                  </span>
-                </button>
-                <button type="button" className="primary" onClick={() => void fill(i)} aria-label={`Điền ${i.title}`}>
+                {itemButton(i, false)}
+                <button type="button" className="primary" onClick={() => void fill(i)} aria-label={`Điền ${i.title}`} data-tip="Điền vào trang">
                   Điền
                 </button>
               </div>
@@ -372,85 +384,70 @@ export function Main({
 
         <div className="list-title">
           <h2>{heading}</h2>
-          <span className="muted small">{visible.length} mục</span>
+          <span className="count">{visible.length}</span>
           <span className="grow" />
           {activeFolder && (
             <>
-              <button
-                type="button"
-                className="link"
+              <IconButton
+                icon="edit"
+                label="Đổi tên thư mục"
                 onClick={() => {
                   const name = window.prompt('Tên mới', activeFolder.name)?.trim();
                   if (name) void change(() => vault.renameFolder(activeFolder.id, name));
                 }}
-              >
-                Đổi tên
-              </button>
-              <button
-                type="button"
-                className="link danger"
+              />
+              <IconButton
+                icon="trash"
+                tone="danger"
+                label="Xoá thư mục"
+                tip="Xoá thư mục (giữ lại các mục bên trong)"
                 onClick={() => {
                   if (!window.confirm(`Xoá thư mục "${activeFolder.name}"? Các mục bên trong được giữ lại, chuyển ra ngoài.`)) return;
                   void change(() => vault.deleteFolder(activeFolder.id));
                   setFilter({ k: 'all' });
                 }}
-              >
-                Xoá
-              </button>
+              />
             </>
           )}
           {filter.k === 'trash' && visible.length > 0 && (
-            <button
-              type="button"
-              className="link danger"
+            <IconButton
+              icon="trash"
+              tone="danger"
+              label="Dọn thùng rác"
+              tip="Xoá hẳn mọi thứ trong thùng rác"
               onClick={() =>
-                window.confirm('Xoá hẳn mọi thứ trong thùng rác? Không khôi phục được.') &&
-                void change(() => vault.emptyBin())
+                window.confirm('Xoá hẳn mọi thứ trong thùng rác? Không khôi phục được.') && void change(() => vault.emptyBin())
               }
-            >
-              Dọn thùng rác
-            </button>
+            />
           )}
         </div>
 
         {session.error && (
           <p className="error banner" role="alert">
-            {session.error}
+            <Icon name="alert" />
+            <span>{session.error}</span>
           </p>
         )}
 
         <ul className="items">
           {visible.map((i) => (
-            <li key={i.id}>
-              <button
-                type="button"
-                className={`item${i.id === selected && !draft ? ' active' : ''}`}
-                onClick={() => {
-                  setSelected(i.id);
-                  setDraft(null);
-                  setPane('detail');
-                }}
-              >
-                <span className={`avatar t-${i.type}`}>
-                  <Icon name={i.type} />
-                </span>
-                <span className="item-text">
-                  <span className="item-title">{i.title || '(không tên)'}</span>
-                  <span className="item-sub">{subtitle(i)}</span>
-                </span>
-                {i.favorite && (
-                  <span className="fav">
-                    <Icon name="star" filled />
-                  </span>
-                )}
-              </button>
-            </li>
+            <li key={i.id}>{itemButton(i, i.id === selected && !draft)}</li>
           ))}
         </ul>
         {visible.length === 0 && (
-          <p className="empty muted">
-            {query ? 'Không tìm thấy mục nào khớp.' : items.length === 0 ? 'Vault đang trống. Bấm "Thêm", hoặc vào Cài đặt để nhập từ 1Password.' : 'Không có mục nào ở đây.'}
-          </p>
+          <div className="empty">
+            <span className="empty-icon">
+              <Icon name={query ? 'search' : items.length === 0 ? 'key' : filter.k === 'trash' ? 'trash' : 'all'} />
+            </span>
+            <p className="small">
+              {query ? 'Không tìm thấy' : items.length === 0 ? 'Vault đang trống' : 'Không có mục nào'}
+            </p>
+            {items.length === 0 && !query && (
+              <button type="button" className="primary" onClick={() => setAdding(true)}>
+                <Icon name="plus" /> Thêm mục đầu tiên
+              </button>
+            )}
+          </div>
         )}
       </section>
 
@@ -478,9 +475,11 @@ export function Main({
             onFill={tab && matchesPage(current, tab.host) ? () => void fill(current) : undefined}
           />
         ) : (
-          <div className="empty muted">
-            <img src="./icon.svg" alt="" />
-            <p>Chọn một mục để xem chi tiết.</p>
+          <div className="empty">
+            <span className="empty-icon">
+              <Icon name="key" />
+            </span>
+            <p className="small">Chọn một mục</p>
           </div>
         )}
       </main>

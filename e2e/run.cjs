@@ -90,6 +90,12 @@ async function device(browser, drive, viewport = { width: 1280, height: 800 }) {
 
 const status = (page) => page.getByTestId('sync-status');
 const waitStatus = (page, s) => status(page).and(page.locator(`[data-status="${s}"]`)).waitFor({ timeout: 20000 });
+/** The six-digit code once the app has worked it out (it shows dots for a moment first). */
+async function otpText(page) {
+  const el = page.getByTestId('otp-code');
+  await el.filter({ hasText: /\d/ }).waitFor({ timeout: 5000 }).catch(() => {});
+  return (await el.textContent()).replace(/\s/g, '');
+}
 const titles = async (page) => (await page.locator('.item-title').allTextContents()).sort();
 
 async function addLogin(page, title, extra = {}) {
@@ -126,7 +132,7 @@ async function localFlow(browser) {
   // Base32 of the ASCII secret "12345678901234567890"
   await addLogin(page, 'GitHub', { otp: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' });
   const expected = totpNow('12345678901234567890');
-  const shown = (await page.getByTestId('otp-code').textContent()).replace(/\s/g, '');
+  const shown = (await otpText(page));
   // The 30-second window can roll over between the two readings.
   check('mã OTP khớp với chuẩn TOTP', [expected, totpNow('12345678901234567890')].includes(shown), `${shown} vs ${expected}`);
   check('mật khẩu bị che mặc định', (await page.locator('.row-value.mono').first().textContent()).startsWith('•'));
@@ -191,6 +197,7 @@ async function localFlow(browser) {
     }),
   );
   await page.getByRole('button', { name: 'Cài đặt' }).click();
+  await page.getByRole('button', { name: 'Dữ liệu' }).click();
   await page.getByLabel('File .1pux').setInputFiles(pux);
   await page.getByText('Đã nhập 2 mục').waitFor();
   check('nhập file .1pux', true);
@@ -204,14 +211,17 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Đóng' }).click();
 
   await page.getByRole('button', { name: 'Từ 1Password' }).click();
-  check('OTP nhập từ 1Password chạy được', (await page.getByTestId('otp-code').textContent()).replace(/\s/g, '').length === 6);
+  check('OTP nhập từ 1Password chạy được', (await otpText(page)).length === 6);
 
   // ---- sharing (device-only vault: links carry the encrypted item) ----
   const makeShare = async (title, { passphrase = '', expiry } = {}) => {
     await page.getByRole('button', { name: title, exact: false }).first().click();
     await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
-    if (expiry) await page.getByLabel('Hết hạn sau').selectOption({ label: expiry });
-    if (passphrase) await page.getByLabel('Mật khẩu chia sẻ (không bắt buộc)').fill(passphrase);
+    if (expiry) await page.getByRole('group', { name: 'Hết hạn sau' }).getByRole('button', { name: expiry }).click();
+    if (passphrase) {
+      await page.getByRole('switch', { name: 'Đặt mật khẩu chia sẻ' }).click();
+      await page.getByRole('textbox', { name: 'Mật khẩu chia sẻ' }).fill(passphrase);
+    }
     await page.getByRole('button', { name: 'Tạo link' }).click();
     const url = await page.getByLabel('Link chia sẻ').inputValue();
     await page.getByRole('button', { name: 'Đóng' }).click();
@@ -228,7 +238,7 @@ async function localFlow(browser) {
   await rp.getByTestId('share-view').getByRole('heading', { name: 'GitHub' }).waitFor();
   await rp.getByRole('button', { name: 'Hiện Mật khẩu' }).click();
   check('người nhận mở link, thấy mật khẩu', (await rp.getByTestId('share-view').textContent()).includes('p@ss-GitHub'));
-  check('người nhận có mã OTP chạy được', /^\d{6}$/.test((await rp.getByTestId('otp-code').textContent()).replace(/\s/g, '')));
+  check('người nhận có mã OTP chạy được', /^\d{6}$/.test((await otpText(rp))));
   await shot(rp, '10-share-view');
 
   const tampered = shareLink.replace(/#share=l\.(.{20})(.)/, (m, a, c) => `#share=l.${a}${c === 'A' ? 'B' : 'A'}`);
@@ -274,7 +284,8 @@ async function localFlow(browser) {
   await rp.getByRole('button', { name: 'Thêm vào vault' }).click();
   await rp.getByRole('button', { name: 'Lưu' }).click();
   await rp.locator('.detail-title h2', { hasText: 'GitHub' }).waitFor();
-  check('"Thêm → Từ link chia sẻ" đưa mục vào vault, kèm OTP', /^\d{6}$/.test((await rp.getByTestId('otp-code').textContent()).replace(/\s/g, '')));
+  const importedOtp = await otpText(rp).catch((e) => `ERR ${e.message.slice(0, 200)}`);
+  check('"Thêm → Từ link chia sẻ" đưa mục vào vault, kèm OTP', /^\d{6}$/.test(importedOtp.replace(/\s/g, '')), importedOtp);
   check('người nhận: không có lỗi trong console', recipient.problems.length === 0, recipient.problems.join(' | '));
   await recipient.ctx.close();
 
@@ -351,7 +362,8 @@ async function localFlow(browser) {
     options: { protocol: 'ctap2', ctap2Version: 'ctap2_1', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
   });
   await page.getByRole('button', { name: 'Cài đặt' }).click();
-  await page.getByLabel('Master password hiện tại (để bật các mục dưới)').fill(PW);
+  await page.getByRole('switch', { name: 'Vân tay / mật khẩu máy' }).click();
+  await page.getByLabel('Xác nhận master password').fill(PW);
   await page.getByRole('button', { name: 'Bật', exact: true }).click();
   await page.getByText('Đã bật mở khoá bằng vân tay').waitFor();
   check('bật mở khoá bằng vân tay / mật khẩu máy', true);
@@ -373,8 +385,9 @@ async function localFlow(browser) {
 
   // ---- recovery key ----
   await page.getByRole('button', { name: 'Cài đặt' }).click();
-  await page.getByLabel('Master password hiện tại (để bật các mục dưới)').fill(PW);
   await page.getByRole('button', { name: 'Tạo', exact: true }).click();
+  await page.getByLabel('Xác nhận master password').fill(PW);
+  await page.getByRole('button', { name: 'Tạo khoá', exact: true }).click();
   const recoveryKey = await page.getByTestId('recovery-key').locator('code').textContent();
   check('tạo khoá khôi phục', /^([A-Z2-9]{5}-){5}[A-Z2-9]{5}$/.test(recoveryKey), recoveryKey);
   check('phải xác nhận đã cất khoá mới đóng được', await page.getByRole('button', { name: 'Xong' }).isDisabled());
@@ -559,6 +572,7 @@ async function driveFlow(browser) {
 
   // Changing the master password on A: B is told what to do instead of silently failing.
   await a.page.getByRole('button', { name: 'Cài đặt' }).click();
+  await a.page.getByRole('button', { name: 'Đổi', exact: true }).click();
   await a.page.getByLabel('Master password hiện tại', { exact: true }).fill(PW);
   await a.page.getByLabel('Master password mới').fill(PW + ' v2');
   await a.page.getByLabel('Nhập lại').fill(PW + ' v2');
@@ -569,13 +583,14 @@ async function driveFlow(browser) {
   await b.page.getByRole('button', { name: 'Mở bộ lọc' }).click();
   await status(b.page).click();
   await waitStatus(b.page, 'error');
-  check('máy B báo rõ khi master password đã đổi ở máy khác', (await status(b.page).getAttribute('title')).includes('master password khác'));
+  check('máy B báo rõ khi master password đã đổi ở máy khác', (await status(b.page).getAttribute('data-tip')).includes('master password khác'));
 
   // A recovery key made on A lets a brand-new device in, through the record stored on Drive.
   const PWv2 = PW + ' v2';
   await a.page.getByRole('button', { name: 'Cài đặt' }).click();
-  await a.page.getByLabel('Master password hiện tại (để bật các mục dưới)').fill(PWv2);
   await a.page.getByRole('button', { name: 'Tạo', exact: true }).click();
+  await a.page.getByLabel('Xác nhận master password').fill(PWv2);
+  await a.page.getByRole('button', { name: 'Tạo khoá', exact: true }).click();
   const driveKey = await a.page.getByTestId('recovery-key').locator('code').textContent();
   await a.page.getByLabel('Tôi đã cất khoá này ở nơi an toàn').check();
   await a.page.getByRole('button', { name: 'Xong' }).click();

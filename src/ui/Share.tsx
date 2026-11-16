@@ -18,8 +18,8 @@ import {
   type SharedItem,
 } from '../lib/share';
 import type { Item } from '../lib/vault';
-import { CopyBtn, errorText, Icon, Modal, OtpCode, SecretInput, useToast } from './bits';
-import { fieldLabel, TYPE_LABEL } from './types';
+import { Avatar, Brand, CopyBtn, errorText, Icon, IconButton, InfoTip, Modal, OtpCode, SecretInput, useToast } from './bits';
+import { fieldLabel } from './types';
 
 const EXPIRY: [string, number][] = [
   ['1 giờ', 3600_000],
@@ -38,6 +38,7 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
   const [expiry, setExpiry] = useState(EXPIRY[2][1]);
   const [withOtp, setWithOtp] = useState(!!item.otp);
   const [passphrase, setPassphrase] = useState('');
+  const [usePass, setUsePass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [link, setLink] = useState<{ url: string; record: ShareRecord } | null>(null);
@@ -90,27 +91,37 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
   };
 
   return (
-    <Modal title={`Chia sẻ: ${item.title}`} onClose={onClose}>
+    <Modal title={`Chia sẻ: ${item.title}`} icon="share" onClose={onClose}>
       {link ? (
-        <section>
-          <h3>Link chia sẻ</h3>
-          <div className="inputrow share-link">
+        <div className="share-form">
+          <div className="share-link">
+            <Icon name="link" />
             <input readOnly value={link.url} aria-label="Link chia sẻ" className="mono" onFocus={(e) => e.target.select()} />
             <CopyBtn value={link.url} what="link" />
           </div>
-          <p className="muted small">
-            Hết hạn lúc {when(link.record.expires)}.{' '}
-            {link.record.kind === 'drive'
-              ? 'Bạn có thể thu hồi bất cứ lúc nào.'
-              : 'Link này chứa toàn bộ dữ liệu (đã mã hoá) nên không thu hồi được; hãy gửi qua kênh an toàn.'}
-          </p>
-          {link.record.passphrase && (
-            <p className="warn small">Gửi mật khẩu chia sẻ cho người nhận qua một kênh khác với kênh gửi link.</p>
-          )}
+          <div className="pill-row">
+            <span className="tag">
+              <Icon name="clock" size={13} /> Hết hạn {when(link.record.expires)}
+            </span>
+            {link.record.kind === 'drive' ? (
+              <span className="tag" data-tip="Bạn có thể thu hồi link này bất cứ lúc nào">
+                <Icon name="cloud" size={13} /> Thu hồi được
+              </span>
+            ) : (
+              <span className="tag" data-tip="Link chứa toàn bộ dữ liệu (đã mã hoá), không thu hồi được. Gửi qua kênh an toàn.">
+                <Icon name="alert" size={13} /> Không thu hồi được
+              </span>
+            )}
+            {link.record.passphrase && (
+              <span className="tag" data-tip="Gửi mật khẩu chia sẻ qua kênh khác với kênh gửi link">
+                <Icon name="lock" size={13} /> Có mật khẩu
+              </span>
+            )}
+          </div>
           <button type="button" onClick={() => setLink(null)}>
-            Tạo link khác
+            <Icon name="plus" /> Tạo link khác
           </button>
-        </section>
+        </div>
       ) : (
         <form
           onSubmit={(e: FormEvent) => {
@@ -119,48 +130,91 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
           }}
           className="share-form"
         >
-          <p className="muted small">
-            Người nhận mở link bằng trình duyệt, không cần cài KaiPass. Dữ liệu được mã hoá; khoá giải mã chỉ
-            nằm trong link.
-          </p>
           <div className="field">
-            <label htmlFor="share-exp">Hết hạn sau</label>
-            <select id="share-exp" value={expiry} onChange={(e) => setExpiry(Number(e.target.value))}>
+            <div className="label-row">
+              <span className="row-label">Hết hạn sau</span>
+              <InfoTip text="Người nhận mở link bằng trình duyệt, không cần cài KaiPass. Khoá giải mã chỉ nằm trong link." />
+            </div>
+            <div className="segmented" role="group" aria-label="Hết hạn sau">
               {EXPIRY.map(([label, ms]) => (
-                <option key={ms} value={ms}>
+                <button type="button" key={ms} aria-pressed={expiry === ms} onClick={() => setExpiry(ms)}>
                   {label}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
-          {item.otp && (
-            <label className="check">
-              <input type="checkbox" checked={withOtp} onChange={(e) => setWithOtp(e.target.checked)} />
-              Kèm mã OTP (người nhận tự tạo được mã)
-            </label>
-          )}
-          <SecretInput
-            label="Mật khẩu chia sẻ (không bắt buộc)"
-            value={passphrase}
-            onChange={setPassphrase}
-            autoComplete="new-password"
-          />
-          {item.attachments.length > 0 && <p className="muted small">File đính kèm không được chia sẻ.</p>}
-          {!onDrive && (
-            <p className="muted small">
-              {drive && !GOOGLE_API_KEY
-                ? 'Chưa cấu hình Google API key nên link sẽ ở dạng tự chứa: không thu hồi được, hạn dùng chỉ được KaiPass kiểm tra. Xem README để bật link thu hồi được.'
-                : 'Vault đang chỉ lưu trên thiết bị nên link sẽ ở dạng tự chứa: không thu hồi được, hạn dùng chỉ được KaiPass kiểm tra.'}
+          <div className="group">
+            {item.otp && (
+              <div className="setting">
+                <span className={`setting-icon${withOtp ? ' on' : ''}`}>
+                  <Icon name="clock" />
+                </span>
+                <div className="setting-text">
+                  <strong>
+                    Kèm mã OTP <InfoTip text="Người nhận tự tạo được mã OTP" />
+                  </strong>
+                </div>
+                <button type="button" role="switch" className="switch" aria-label="Kèm mã OTP" aria-checked={withOtp} onClick={() => setWithOtp(!withOtp)} />
+              </div>
+            )}
+            <div className="setting">
+              <span className={`setting-icon${usePass ? ' on' : ''}`}>
+                <Icon name="lock" />
+              </span>
+              <div className="setting-text">
+                <strong>
+                  Mật khẩu chia sẻ <InfoTip text="Có mật khẩu thì link thôi là chưa đủ để mở. Gửi mật khẩu qua kênh khác." />
+                </strong>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                className="switch"
+                aria-label="Đặt mật khẩu chia sẻ"
+                aria-checked={usePass}
+                onClick={() => {
+                  setUsePass(!usePass);
+                  setPassphrase('');
+                }}
+              />
+            </div>
+            {usePass && (
+              <div className="setting-panel">
+                <SecretInput label="Mật khẩu chia sẻ" hideLabel placeholder="Mật khẩu chia sẻ" value={passphrase} onChange={setPassphrase} autoComplete="new-password" autoFocus />
+              </div>
+            )}
+          </div>
+          {(item.attachments.length > 0 || !onDrive) && (
+            <p className="note">
+              <Icon name="info" />
+              <span>
+                {[
+                  item.attachments.length > 0 && 'Không kèm file đính kèm.',
+                  !onDrive && 'Link tự chứa: không thu hồi được.',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              </span>
+              {!onDrive && (
+                <InfoTip
+                  text={
+                    drive && !GOOGLE_API_KEY
+                      ? 'Chưa cấu hình Google API key nên link chứa dữ liệu (đã mã hoá) bên trong, và hạn dùng chỉ được KaiPass kiểm tra. Xem README để bật link thu hồi được.'
+                      : 'Vault đang chỉ lưu trên thiết bị nên link chứa dữ liệu (đã mã hoá) bên trong, và hạn dùng chỉ được KaiPass kiểm tra.'
+                  }
+                />
+              )}
             </p>
           )}
           {error && (
             <p className="error" role="alert">
-              {error}
+              <Icon name="alert" />
+              <span>{error}</span>
             </p>
           )}
           <div className="actions">
-            <button className="primary" disabled={busy}>
-              {busy ? 'Đang tạo…' : 'Tạo link'}
+            <button className="primary" disabled={busy || (usePass && !passphrase)}>
+              <Icon name="link" /> {busy ? 'Đang tạo…' : 'Tạo link'}
             </button>
             {error && onDrive && (
               <button type="button" onClick={() => void make(true)} disabled={busy}>
@@ -172,25 +226,32 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
       )}
 
       {existing.length > 0 && (
-        <section>
+        <div className="stack">
           <h3>Link đang còn hạn</h3>
-          {existing.map((r) => (
-            <div className="row share-row" key={r.id}>
-              <div className="row-main">
-                <div className="row-value">
-                  {r.kind === 'drive' ? 'Link qua Google Drive' : 'Link tự chứa'}
-                  {r.passphrase && ' · có mật khẩu'}
+          <div className="group">
+            {existing.map((r) => (
+              <div className="row share-row" key={r.id}>
+                <span className="file-icon">
+                  <Icon name={r.kind === 'drive' ? 'cloud' : 'link'} />
+                </span>
+                <div className="row-main">
+                  <div className="row-value">
+                    {r.kind === 'drive' ? 'Link qua Google Drive' : 'Link tự chứa'}
+                    {r.passphrase && ' · có mật khẩu'}
+                  </div>
+                  <div className="muted small">Hết hạn {when(r.expires)}</div>
                 </div>
-                <div className="muted small">
-                  Tạo {when(r.created)} · hết hạn {when(r.expires)}
-                </div>
+                <IconButton
+                  icon={r.kind === 'drive' ? 'x' : 'trash'}
+                  tone="danger"
+                  label={r.kind === 'drive' ? 'Thu hồi' : 'Bỏ'}
+                  tip={r.kind === 'drive' ? 'Thu hồi link' : 'Bỏ khỏi danh sách (link vẫn mở được tới khi hết hạn)'}
+                  onClick={() => void revoke(r)}
+                />
               </div>
-              <button type="button" className="danger" onClick={() => void revoke(r)}>
-                {r.kind === 'drive' ? 'Thu hồi' : 'Bỏ'}
-              </button>
-            </div>
-          ))}
-        </section>
+            ))}
+          </div>
+        </div>
       )}
     </Modal>
   );
@@ -207,12 +268,12 @@ function Field({ label, value, secret }: { label: string; value: string; secret?
         <div className="row-label">{label}</div>
         <div className={`row-value${secret ? ' mono' : ''}`}>{secret && !show ? '••••••••••' : value}</div>
       </div>
-      {secret && (
-        <button type="button" className="iconbtn" onClick={() => setShow(!show)} aria-label={`${show ? 'Ẩn' : 'Hiện'} ${label}`}>
-          <Icon name={show ? 'eyeOff' : 'eye'} />
-        </button>
-      )}
-      <CopyBtn value={value} secret={secret} what={label.toLowerCase()} />
+      <div className="row-actions">
+        {secret && (
+          <IconButton icon={show ? 'eyeOff' : 'eye'} label={`${show ? 'Ẩn' : 'Hiện'} ${label}`} tip={show ? 'Ẩn' : 'Hiện'} onClick={() => setShow(!show)} />
+        )}
+        <CopyBtn value={value} secret={secret} what={label.toLowerCase()} />
+      </div>
     </div>
   );
 }
@@ -301,12 +362,12 @@ export function ShareView({ link }: { link: ParsedLink | undefined }) {
   return (
     <div className="center">
       <div className="panel share-view" data-testid="share-view">
-        <div className="brand">
-          <img src="./icon.svg" alt="" />
-          <div>
-            <h1>KaiPass</h1>
-            <p className="muted small">Ai đó đã chia sẻ thông tin này với bạn</p>
-          </div>
+        <div className="step-head">
+          <Brand small />
+          <span className="grow" />
+          <span className="badge" data-tip="Ai đó đã chia sẻ thông tin này với bạn qua KaiPass">
+            <Icon name="share" /> Được chia sẻ
+          </span>
         </div>
         {busy && <p className="muted">Đang mở…</p>}
         {envelope && !item && envelope.salt && (
@@ -317,8 +378,13 @@ export function ShareView({ link }: { link: ParsedLink | undefined }) {
             }}
             className="share-form"
           >
-            <SecretInput label="Mật khẩu chia sẻ" value={pass} onChange={setPass} autoFocus />
-            <p className="muted small">Người gửi đã đặt mật khẩu cho link này. Hãy hỏi họ.</p>
+            <SecretInput
+              label="Mật khẩu chia sẻ"
+              hint="Người gửi đã đặt mật khẩu cho link này. Hãy hỏi họ."
+              value={pass}
+              onChange={setPass}
+              autoFocus
+            />
             <button className="primary" disabled={busy || !pass}>
               Mở
             </button>
@@ -326,22 +392,27 @@ export function ShareView({ link }: { link: ParsedLink | undefined }) {
         )}
         {error && (
           <p className="error" role="alert">
-            {error}
+            <Icon name="alert" />
+            <span>{error}</span>
           </p>
         )}
         {item && envelope && (
           <>
-            <div>
-              <h2>{item.title || '(không tên)'}</h2>
-              <p className="muted small">
-                {TYPE_LABEL[item.type] ?? ''} · link hết hạn lúc {when(envelope.expires)}
-              </p>
+            <div className="detail-head">
+              <Avatar title={item.title} icon={item.type} size={44} />
+              <div className="detail-title">
+                <h2>{item.title || '(không tên)'}</h2>
+                <div className="detail-meta">
+                  <span className="tag">
+                    <Icon name="clock" size={13} /> Hết hạn {when(envelope.expires)}
+                  </span>
+                </div>
+              </div>
             </div>
             <SharedItemCard item={item} />
             <button type="button" className="primary" onClick={save}>
-              Lưu vào KaiPass của bạn
+              <Icon name="plus" /> Lưu vào KaiPass của bạn
             </button>
-            <p className="muted small">Không dùng KaiPass? Bấm copy từng mục để dán vào trình quản lý mật khẩu của bạn.</p>
           </>
         )}
       </div>
@@ -354,7 +425,7 @@ export function ImportShareDialog({ onUse, onClose }: { onUse: (item: SharedItem
   const [text, setText] = useState('');
   const [link, setLink] = useState<ParsedLink | undefined | null>(null);
   return (
-    <Modal title="Thêm từ link chia sẻ" onClose={onClose}>
+    <Modal title="Thêm từ link chia sẻ" icon="link" onClose={onClose}>
       {link === null ? (
         <form
           className="share-form"
@@ -364,13 +435,12 @@ export function ImportShareDialog({ onUse, onClose }: { onUse: (item: SharedItem
           }}
         >
           <div className="field">
-            <label htmlFor="share-url">Link chia sẻ KaiPass</label>
+            <div className="label-row">
+              <label htmlFor="share-url">Link chia sẻ KaiPass</label>
+              <InfoTip text="Link chia sẻ từ 1Password không đọc được ở đây: mở link đó trong trình duyệt rồi copy từng mục. Với OTP, nhờ người gửi kèm chuỗi otpauth://." />
+            </div>
             <input id="share-url" value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder="https://…#share=…" />
           </div>
-          <p className="muted small">
-            Link chia sẻ từ 1Password không đọc được ở đây: mở link đó trong trình duyệt rồi copy từng mục. Với
-            OTP, nhờ người gửi kèm chuỗi otpauth://.
-          </p>
           <button className="primary" disabled={!text.trim()}>
             Mở link
           </button>
