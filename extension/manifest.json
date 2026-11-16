@@ -37,7 +37,8 @@
     "activeTab",
     "scripting",
     "storage",
-    "identity"
+    "identity",
+    "alarms"
   ],
   "host_permissions": [
     "https://www.googleapis.com/*"

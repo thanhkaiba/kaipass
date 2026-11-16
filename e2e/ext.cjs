@@ -43,6 +43,12 @@ const PAGES = {
   '/otp': `<form><input name="code" autocomplete="one-time-code" inputmode="numeric"></form>`,
   '/digits': `<form>${'<input class="d" maxlength="1" inputmode="numeric">'.repeat(6)}</form>`,
   '/hidden': `<form><input name="email" style="display:none"><input name="pass" type="password" style="display:none"><input name="user" type="text"><input name="password" type="password"></form>`,
+  '/signin': `<form method="post" action="/welcome"><input name="email" type="text" autocomplete="username"><input name="password" type="password" autocomplete="current-password"><button type="submit">Sign in</button></form>`,
+  '/username-step': `<form method="post" action="/password-step"><input name="identifier" autocomplete="username"><button type="submit">Next</button></form>`,
+  '/password-step': `<form method="post" action="/welcome"><input name="password" type="password" autocomplete="current-password"><button type="submit">Sign in</button></form>`,
+  '/spa': `<div><input id="u" autocomplete="username"><input id="p" type="password"><button type="button" id="go">Sign in</button></div><p id="msg"></p>
+    <script>document.getElementById('go').addEventListener('click', () => { document.getElementById('msg').textContent = 'Welcome'; });</script>`,
+  '/welcome': `<h1>Welcome</h1>`,
   '/frame': `<p>Trang chứa khung của site khác</p><iframe src="http://127.0.0.1:${PORT}/login" width="400" height="200"></iframe>`,
 };
 
@@ -233,6 +239,74 @@ const PAGES = {
     await frame.locator('kaipass-ui .badge').click();
     await frame.locator('kaipass-ui .panel .note').waitFor({ state: 'visible' });
     check('khung của site khác trong trang không được gợi ý', (await frame.locator('kaipass-ui .panel').textContent()).includes('Chưa có đăng nhập'));
+
+    // ---- offering to save logins typed into pages ----
+    const fillIndex = () => ext.evaluate(async () => (await chrome.storage.session.get('kaipass.fill'))['kaipass.fill'] ?? []);
+    const waitIndex = async (ok) => {
+      for (let i = 0; i < 100; i++) {
+        if (ok(await fillIndex())) return;
+        await site.waitForTimeout(100);
+      }
+      throw new Error('fill index never reached the expected state');
+    };
+    const saveCard = ui.locator('.save');
+    const signIn = async (origin, user, pass) => {
+      await site.goto(`${origin}/signin`);
+      await site.locator('[name=email]').fill(user);
+      await site.locator('[name=password]').fill(pass);
+      await site.getByRole('button', { name: 'Sign in' }).click();
+      await site.waitForURL(/\/welcome$/);
+    };
+    const ip = `http://127.0.0.1:${PORT}`;
+
+    await signIn(ip, 'bob', 'pw-bob-1');
+    await saveCard.waitFor({ state: 'visible', timeout: 10000 });
+    check('đăng nhập bằng tài khoản mới: hỏi lưu ở trang kế tiếp', (await saveCard.textContent()).includes('Lưu đăng nhập') && (await saveCard.textContent()).includes('bob'));
+    check('thẻ hỏi lưu không hiện mật khẩu', !(await saveCard.textContent()).includes('pw-bob-1'));
+    if (shots) await site.screenshot({ path: join(shots, 'save-card.png') });
+    await saveCard.getByRole('button', { name: 'Lưu', exact: true }).click();
+    await waitIndex((list) => list.some((e) => e.username === 'bob'));
+    const bob = (await fillIndex()).filter((e) => e.hosts.includes('127.0.0.1'));
+    check('bấm Lưu: tài khoản vào vault với đúng tên miền', bob.length === 1 && bob[0].password === 'pw-bob-1' && bob[0].title === '127.0.0.1', JSON.stringify(bob.map((e) => e.title)));
+    await ext.locator('.item-title', { hasText: '127.0.0.1' }).first().waitFor({ timeout: 10000 });
+    check('cửa sổ KaiPass đang mở tự thấy mục vừa lưu', true);
+
+    await signIn(ip, 'bob', 'pw-bob-1');
+    await site.waitForTimeout(1500);
+    check('đăng nhập lại bằng tài khoản đã lưu: không hỏi', !(await saveCard.isVisible()));
+
+    await signIn(ip, 'bob', 'pw-bob-2');
+    await saveCard.waitFor({ state: 'visible', timeout: 10000 });
+    check('đổi mật khẩu: hỏi cập nhật', (await saveCard.textContent()).includes('Cập nhật mật khẩu'));
+    await saveCard.getByRole('button', { name: 'Cập nhật' }).click();
+    await waitIndex((list) => list.some((e) => e.password === 'pw-bob-2'));
+    const bob2 = (await fillIndex()).filter((e) => e.hosts.includes('127.0.0.1'));
+    check('cập nhật mật khẩu, không tạo mục trùng', bob2.length === 1 && bob2[0].password === 'pw-bob-2');
+
+    await site.goto(`${ip}/username-step`);
+    await site.locator('[name=identifier]').fill('carol');
+    await site.getByRole('button', { name: 'Next' }).click();
+    await site.waitForURL(/password-step/);
+    await site.locator('[name=password]').fill('pw-carol');
+    await site.getByRole('button', { name: 'Sign in' }).click();
+    await site.waitForURL(/\/welcome$/);
+    await saveCard.waitFor({ state: 'visible', timeout: 10000 });
+    check('đăng nhập hai bước: nhớ tên đăng nhập ở bước đầu', (await saveCard.textContent()).includes('carol'));
+    await saveCard.getByRole('button', { name: 'Không bao giờ cho trang này' }).click();
+    await signIn(ip, 'dave', 'pw-dave');
+    await site.waitForTimeout(1500);
+    check('chọn "Không bao giờ": trang đó không hỏi nữa', !(await saveCard.isVisible()));
+
+    await site.goto(`http://localhost:${PORT}/spa`);
+    await site.locator('#u').fill('erin');
+    await site.locator('#p').fill('pw-erin');
+    await site.locator('#go').click();
+    await saveCard.waitFor({ state: 'visible', timeout: 10000 });
+    check('trang không chuyển (app một trang): vẫn hỏi lưu', (await saveCard.textContent()).includes('erin'));
+    await saveCard.getByRole('button', { name: 'Để sau' }).click();
+    await site.reload();
+    await site.waitForTimeout(1500);
+    check('bấm "Để sau": không hỏi lại khi tải lại trang', !(await saveCard.isVisible()));
 
     // Turning the suggestion card off in settings is respected.
     await ext.evaluate(() => chrome.storage.local.set({ 'kaipass.inline': { icon: true, toast: false } }));

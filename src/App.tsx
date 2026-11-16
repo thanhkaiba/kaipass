@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { forget, recall, remember, writeFillIndex } from './ext/browser';
+import { BUMP_KEY } from './ext/match';
 import { preloadGoogle } from './lib/drive';
 import { isExtension, isPopup } from './lib/platform';
 import { autoLockMinutes } from './lib/prefs';
@@ -48,7 +49,16 @@ export default function App() {
     const { session } = phase;
     const publish = () => void writeFillIndex(session.vault.items());
     publish();
-    return session.subscribe(publish);
+    const unsubscribe = session.subscribe(publish);
+    // The background worker saved a login or synced: fold its changes into the open vault.
+    const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === 'session' && changes[BUMP_KEY]) void session.reloadLocal().catch(() => {});
+    };
+    chrome.storage.onChanged.addListener(onChange);
+    return () => {
+      unsubscribe();
+      chrome.storage.onChanged.removeListener(onChange);
+    };
   }, [phase]);
 
   const lock = useCallback(

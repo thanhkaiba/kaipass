@@ -8,7 +8,7 @@
  * only acts on real (trusted) clicks and key presses.
  */
 import { fillPage } from './fill';
-import type { FillReply, Request, StateReply, SuggestItem } from './match';
+import type { FillReply, Request, SavePromptReply, StateReply, SuggestItem } from './match';
 
 declare const __KAIPASS_TEST__: boolean;
 
@@ -83,7 +83,7 @@ declare const __KAIPASS_TEST__: boolean;
   .panel { position: fixed; display: none; min-width: 260px; max-width: 360px; max-height: 320px; overflow: auto;
     padding: 6px; border-radius: 10px; background: #fff; color: #1b2030; border: 1px solid #d9dee8;
     box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
-  .toast { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
+  .toast, .save { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
     background: #fff; color: #1b2030; border: 1px solid #d9dee8; box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
   .head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; font-weight: 600; }
   .head .logo { width: 20px; height: 20px; border-radius: 5px; background: #175ddc; flex: none; }
@@ -104,8 +104,16 @@ declare const __KAIPASS_TEST__: boolean;
   .action { margin: 4px 8px 6px; padding: 7px 12px; border: 0; border-radius: 8px; background: #175ddc; color: #fff; font-weight: 600; }
   .x { margin-left: auto; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #5d667a; font-size: 18px; line-height: 1; }
   .x:hover { background: #eef1f6; }
+  .who { margin: 0 4px 10px; padding: 8px 10px; border-radius: 8px; background: #eef1f6; }
+  .who .user { font-size: 13px; }
+  .buttons { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 4px 2px; }
+  .buttons .action { margin: 0; }
+  .ghost { padding: 7px 12px; border: 1px solid #d9dee8; border-radius: 8px; background: transparent; color: #1b2030; }
+  .link { padding: 7px 4px; border: 0; background: transparent; color: #5d667a; font-size: 12px; }
   @media (prefers-color-scheme: dark) {
-    .panel, .toast { background: #1b1f2a; color: #e8ebf2; border-color: #323a4c; }
+    .panel, .toast, .save { background: #1b1f2a; color: #e8ebf2; border-color: #323a4c; }
+    .ghost { color: #e8ebf2 !important; border-color: #323a4c !important; }
+    .who { background: #242a38 !important; }
     .row:hover, .row:focus-visible { background: #1f2d4a; }
     .avatar { background: #242a38; color: #6a9cf5; }
     .user, .note, .head .sub, .x { color: #9aa3b8; }
@@ -114,11 +122,13 @@ declare const __KAIPASS_TEST__: boolean;
 </style>
 <button class="badge" part="badge" title="KaiPass" aria-label="KaiPass"></button>
 <div class="panel" role="listbox" aria-label="KaiPass"></div>
-<div class="toast" role="dialog" aria-label="KaiPass"></div>`;
+<div class="toast" role="dialog" aria-label="KaiPass"></div>
+<div class="save" role="dialog" aria-label="Lưu vào KaiPass"></div>`;
   const LOGO = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect x="116" y="126" width="280" height="260" rx="36" fill="none" stroke="#fff" stroke-width="34"/><circle cx="256" cy="256" r="58" fill="none" stroke="#fff" stroke-width="34"/></svg>`;
   const badge = root.querySelector<HTMLButtonElement>('.badge')!;
   const panel = root.querySelector<HTMLDivElement>('.panel')!;
   const toast = root.querySelector<HTMLDivElement>('.toast')!;
+  const saveCard = root.querySelector<HTMLDivElement>('.save')!;
   badge.innerHTML = LOGO;
   let mounted = false;
   const mount = () => {
@@ -278,6 +288,110 @@ declare const __KAIPASS_TEST__: boolean;
     toast.style.display = 'block';
   }
 
+  // ---- offering to save what the user typed ----
+
+  function showSaveCard(reply: SavePromptReply) {
+    if (!isTop || !reply.prompt) return;
+    toastShown = true;
+    toast.style.display = 'none';
+    saveCard.replaceChildren();
+    const head = el('div', 'head');
+    const logo = el('span', 'logo');
+    logo.innerHTML = LOGO;
+    const title = el('span', 'grow');
+    title.append(
+      el('div', '', reply.prompt === 'update' ? 'Cập nhật mật khẩu trong KaiPass?' : 'Lưu đăng nhập vào KaiPass?'),
+      el('div', 'sub', reply.host ?? ''),
+    );
+    const close = el('button', 'x', '×');
+    close.setAttribute('aria-label', 'Đóng');
+    head.append(logo, title, close);
+    const who = el('div', 'who');
+    who.append(el('div', 'title', reply.username || '(không có tên đăng nhập)'), el('div', 'user', '••••••••••'));
+    const buttons = el('div', 'buttons');
+    const save = el('button', 'action', reply.prompt === 'update' ? 'Cập nhật' : 'Lưu');
+    const later = el('button', 'ghost', 'Để sau');
+    const never = el('button', 'link', 'Không bao giờ cho trang này');
+    buttons.append(save, later, never);
+    saveCard.append(head, who, buttons);
+    const answer = (action: 'save' | 'dismiss' | 'never') => {
+      saveCard.style.display = 'none';
+      void ask({ type: 'saveAnswer', action });
+    };
+    onTrusted(save, () => answer('save'));
+    onTrusted(later, () => answer('dismiss'));
+    onTrusted(close, () => answer('dismiss'));
+    onTrusted(never, () => answer('never'));
+    mount();
+    saveCard.style.display = 'block';
+  }
+
+  const usernameNear = (pw: HTMLInputElement | null, scope: ParentNode): string => {
+    const fields = Array.from(scope.querySelectorAll('input')).filter((i) => roleOf(i) === 'username' && i.value);
+    if (!pw) return fields[0]?.value ?? '';
+    const before = fields.filter((i) => !!(i.compareDocumentPosition(pw) & Node.DOCUMENT_POSITION_FOLLOWING));
+    return (before.pop() ?? fields[0])?.value ?? '';
+  };
+
+  /** Picks the password being set (sign-up, change) or used (sign-in) in a form. */
+  function choosePassword(scope: ParentNode): HTMLInputElement | null {
+    const all = Array.from(scope.querySelectorAll<HTMLInputElement>('input[type=password]')).filter(
+      (i) => i.value && !OTP_WORDS.test(hint(i)),
+    );
+    if (!all.length) return null;
+    const fresh = all.filter((i) => i.autocomplete === 'new-password');
+    if (fresh.length) return fresh[0];
+    if (all.length === 3) return all[1]; // current, new, confirm
+    if (all.length === 2 && all[0].value !== all[1].value) return all[1]; // current, new
+    return all[0];
+  }
+
+  let lastCapture = '';
+  function capture(from: EventTarget | null) {
+    const node = from instanceof Element ? from : null;
+    const scope: ParentNode = (node?.closest('form') as HTMLFormElement | null) ?? document;
+    const pw = choosePassword(scope) ?? (scope === document ? null : choosePassword(document));
+    const username = usernameNear(pw, pw?.form ?? scope);
+    if (!pw) {
+      if (username) void ask({ type: 'sawUsername', username });
+      return;
+    }
+    const key = `${username}\u0000${pw.value}`;
+    if (key === lastCapture) return;
+    lastCapture = key;
+    void ask<SavePromptReply>({ type: 'captured', username, password: pw.value }).then((reply) => {
+      // If the page stays (single-page apps), ask here; if it navigates, the next page asks.
+      if (reply?.prompt) setTimeout(() => document.visibilityState === 'visible' && showSaveCard(reply), 900);
+    });
+  }
+
+  document.addEventListener('submit', (e) => e.isTrusted && capture(e.target), true);
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!e.isTrusted) return;
+      const target = e.composedPath()[0];
+      if (!(target instanceof Element) || e.composedPath().includes(host)) return;
+      const button = target.closest<HTMLElement>('button, input[type=submit], input[type=button], [role=button]');
+      if (!button) return;
+      // Only buttons that look like they send the form, not "show password" toggles and the like.
+      const label = `${button.textContent ?? ''} ${(button as HTMLInputElement).value ?? ''} ${button.getAttribute('aria-label') ?? ''}`;
+      const submits =
+        (button instanceof HTMLButtonElement && button.type === 'submit' && !!button.form) ||
+        (button instanceof HTMLInputElement && button.type === 'submit') ||
+        /log ?in|sign ?in|sign ?up|register|continue|next|submit|create|save|đăng nhập|đăng ký|tiếp|lưu|xác nhận/i.test(label);
+      if (submits) capture(button);
+    },
+    true,
+  );
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.isTrusted && e.key === 'Enter' && e.composedPath()[0] instanceof HTMLInputElement) capture(e.composedPath()[0]);
+    },
+    true,
+  );
+
   // ---- events ----
 
   document.addEventListener(
@@ -353,5 +467,12 @@ declare const __KAIPASS_TEST__: boolean;
     clearTimeout(pending);
     pending = setTimeout(() => void maybeToast(), 400);
   }).observe(document.documentElement, { childList: true, subtree: true });
-  void maybeToast();
+  if (isTop) {
+    void ask<SavePromptReply>({ type: 'pendingSave' }).then((reply) => {
+      if (reply?.prompt) showSaveCard(reply);
+      else void maybeToast();
+    });
+  } else {
+    void maybeToast();
+  }
 })();

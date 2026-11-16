@@ -23,6 +23,12 @@ export function hostMatches(saved: string, page: string): boolean {
 export const UNLOCK_KEY = 'kaipass.unlock';
 export const FILL_INDEX_KEY = 'kaipass.fill';
 export const INLINE_PREFS_KEY = 'kaipass.inline';
+/** Hosts the user told us never to offer saving for (storage.local). */
+export const NEVER_SAVE_KEY = 'kaipass.neverSave';
+/** Logins captured on a page, waiting for the user's answer (storage.session, per tab). */
+export const PENDING_KEY = 'kaipass.pending';
+/** Bumped by the background worker after it changes this device's copy of the vault. */
+export const BUMP_KEY = 'kaipass.bump';
 
 export interface UnlockRecord {
   password: string;
@@ -60,7 +66,33 @@ export interface SuggestItem {
   hasOtp: boolean;
 }
 
-export type Request = { type: 'state' } | { type: 'fill'; id: string } | { type: 'open' };
+export type SavePrompt = 'new' | 'update';
+
+export type Request =
+  | { type: 'state' }
+  | { type: 'fill'; id: string }
+  | { type: 'open' }
+  | { type: 'sawUsername'; username: string }
+  | { type: 'captured'; username: string; password: string }
+  | { type: 'pendingSave' }
+  | { type: 'saveAnswer'; action: 'save' | 'dismiss' | 'never' };
+
+export interface PendingSave {
+  host: string;
+  origin: string;
+  username: string;
+  password: string;
+  prompt: SavePrompt;
+  /** id of the login being updated */
+  id?: string;
+  at: number;
+}
+
+export interface SavePromptReply {
+  prompt: SavePrompt | null;
+  username?: string;
+  host?: string;
+}
 
 export interface StateReply {
   locked: boolean;

@@ -131,6 +131,22 @@ export class Session {
     }
   }
 
+  /**
+   * Folds in changes another part of the app (the extension's background worker) wrote to this
+   * device's copy, without losing edits made here.
+   */
+  async reloadLocal(): Promise<void> {
+    const bytes = await kv.get<ArrayBuffer>(K_VAULT);
+    const stored = await kv.get<Meta>(K_META);
+    if (!bytes || !stored || this.closed) return;
+    await this.vault.merge(bytes);
+    if (stored.mode === this.meta.mode && stored.fileId === this.meta.fileId) {
+      this.meta.rev = stored.rev;
+      this.meta.lastSync = stored.lastSync;
+    }
+    this.emit();
+  }
+
   /** Moves a device-only vault onto Drive. Fails if that account already holds a vault. */
   async moveToDrive(drive: Drive): Promise<Session> {
     if (await drive.find(FILE_NAME)) {
