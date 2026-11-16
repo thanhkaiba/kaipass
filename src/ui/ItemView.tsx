@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Item, Vault } from '../lib/vault';
-import { CopyBtn, downloadBytes, formatSize, Icon, OtpCode, useToast } from './bits';
+import { Attachments } from './Attachments';
+import { CopyBtn, formatSize, Icon, OtpCode, useToast } from './bits';
 import { fieldLabel, TYPE_LABEL } from './types';
 
 function Row({ label, value, secret, link }: { label: string; value: string; secret?: boolean; link?: boolean }) {
@@ -195,39 +196,13 @@ export function ItemView({
             onChange={(e) => void attach(e.target.files)}
           />
         </div>
-        {item.attachments.map((a) => (
-          <div className="row" key={a.name}>
-            <div className="row-main">
-              <div className="row-value">{a.name}</div>
-              <div className="muted small">{formatSize(a.size)}</div>
-            </div>
-            <button
-              type="button"
-              className="iconbtn"
-              title="Tải về"
-              aria-label={`Tải ${a.name}`}
-              onClick={() => {
-                const data = vault.attachment(item.id, a.name);
-                if (data) downloadBytes(a.name, data as BlobPart);
-              }}
-            >
-              <Icon name="download" />
-            </button>
-            {!item.trashed && (
-              <button
-                type="button"
-                className="iconbtn"
-                title="Gỡ file"
-                aria-label={`Gỡ ${a.name}`}
-                onClick={() =>
-                  window.confirm(`Gỡ file "${a.name}"?`) && change(() => vault.removeAttachment(item.id, a.name))
-                }
-              >
-                <Icon name="x" />
-              </button>
-            )}
-          </div>
-        ))}
+        <Attachments
+          item={item}
+          vault={vault}
+          onRemove={(name) =>
+            window.confirm(`Gỡ file "${name}"?`) && void change(() => vault.removeAttachment(item.id, name))
+          }
+        />
       </section>
 
       {item.tags.length > 0 && (

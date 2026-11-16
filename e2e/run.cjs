@@ -16,6 +16,11 @@ const PORT = 4173;
 const URL_ = `http://localhost:${PORT}/`;
 const PW = 'correct horse battery';
 const shots = process.env.SHOTS_DIR;
+const PNG_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+const MINI_PDF =
+  '%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n';
 
 kdbxweb.CryptoEngine.setArgon2Impl(async (password, salt, memory, iterations, length, parallelism, type) => {
   const out = await (type === 2 ? argon2id : argon2d)({
@@ -147,6 +152,26 @@ async function localFlow(browser) {
   await page.getByText('cccd.txt').waitFor();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Tải cccd.txt' }).click()]);
   check('đính kèm và tải lại file', readFileSync(await dl.path(), 'utf8') === 'mat truoc cccd');
+
+  // Images get a thumbnail and open in the viewer; PDFs and text files open in the viewer too.
+  const png = join(dir, 'cccd-mat-truoc.png');
+  writeFileSync(png, Buffer.from(PNG_B64, 'base64'));
+  const pdf = join(dir, 'so-do.pdf');
+  writeFileSync(pdf, MINI_PDF);
+  await page.getByTestId('attach-input').setInputFiles([png, pdf]);
+  await page.getByRole('button', { name: 'Xem cccd-mat-truoc.png' }).waitFor();
+  const thumbOk = await page.locator('.thumb img').evaluate((img) => img.complete && img.naturalWidth > 0);
+  check('ảnh đính kèm hiện thumbnail', thumbOk);
+  await page.getByRole('button', { name: 'Xem cccd-mat-truoc.png' }).click();
+  await page.getByTestId('viewer-image').waitFor();
+  check('bấm thumbnail mở ảnh lớn', await page.getByTestId('viewer-image').evaluate((img) => img.naturalWidth > 0));
+  await shot(page, '09-viewer');
+  await page.keyboard.press('ArrowRight');
+  await page.getByTestId('viewer-pdf').waitFor();
+  check('mũi tên chuyển sang file kế tiếp (PDF)', true);
+  await page.keyboard.press('ArrowRight');
+  check('file .txt xem được dạng chữ', (await page.getByTestId('viewer').textContent()).includes('mat truoc cccd'));
+  await page.getByRole('button', { name: 'Đóng' }).click();
 
   // 1Password import
   const pux = join(dir, 'export.1pux');

@@ -39,6 +39,8 @@ const PATHS: Record<string, string> = {
   all: 'M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z',
   dice: 'M5 5h14v14H5zM9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01',
   restore: 'M4 12a8 8 0 102.600-5.900M4 4v4.500h4.500',
+  image: 'M4 5h16v14H4zM4 16l4.500-4.500 3.500 3.500 2.500-2.500L20 18M15.500 9.500h.010',
+  pdf: 'M6 3h9l4 4v14H6zM15 3v4h4M9 13h1.500a1.500 1.500 0 010 3H9v-3zm0 3v2M14 13v5M14 13h2.500M14 15.500h2',
 };
 
 export function Icon({ name, filled }: { name: string; filled?: boolean }) {
@@ -123,10 +125,12 @@ export function Modal({
   title,
   onClose,
   children,
+  wide,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  wide?: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -135,7 +139,7 @@ export function Modal({
   }, [onClose]);
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header>
           <h2>{title}</h2>
           <button type="button" className="iconbtn" onClick={onClose} aria-label="Đóng">

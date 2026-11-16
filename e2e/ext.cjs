@@ -109,6 +109,21 @@ const PAGES = {
     check('mục khớp trang có nút "Điền vào trang"', true);
     if (shots) await ext.screenshot({ path: join(shots, 'ext-item.png') });
 
+    // A PDF opens in the viewer inside the extension (its CSP must allow blob: frames).
+    const pdfPath = join(mkdtempSync(join(tmpdir(), 'kaipass-pdf-')), 'giay-to.pdf');
+    require('node:fs').writeFileSync(pdfPath, '%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
+    await ext.evaluate(() => {
+      window.__csp = [];
+      document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+    });
+    await ext.getByTestId('attach-input').setInputFiles(pdfPath);
+    await ext.getByRole('button', { name: 'giay-to.pdf', exact: true }).click();
+    await ext.getByTestId('viewer-pdf').waitFor();
+    await ext.waitForTimeout(500);
+    const csp = await ext.evaluate(() => window.__csp);
+    check('extension mở được PDF đính kèm (không bị CSP chặn)', csp.length === 0, csp.join(' | '));
+    await ext.getByRole('button', { name: 'Đóng' }).click();
+
     // Reopening the popup must not ask for the master password again.
     await openPopup();
     check('mở lại popup không phải nhập lại master password', await ext.getByTestId('suggestions').isVisible());
