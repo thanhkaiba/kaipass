@@ -218,15 +218,20 @@ async function localFlow(browser) {
     await page.getByRole('button', { name: title, exact: false }).first().click();
     await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
     if (expiry) await page.getByRole('group', { name: 'Hết hạn sau' }).getByRole('button', { name: expiry }).click();
-    if (passphrase) {
-      await page.getByRole('switch', { name: 'Đặt mật khẩu chia sẻ' }).click();
-      await page.getByRole('textbox', { name: 'Mật khẩu chia sẻ' }).fill(passphrase);
-    }
+    const passSwitch = page.getByRole('switch', { name: 'Đặt mật khẩu chia sẻ' });
+    if (((await passSwitch.getAttribute('aria-checked')) === 'true') !== !!passphrase) await passSwitch.click();
+    if (passphrase) await page.getByRole('textbox', { name: 'Mật khẩu chia sẻ' }).fill(passphrase);
     await page.getByRole('button', { name: 'Tạo link' }).click();
     const url = await page.getByLabel('Link chia sẻ').inputValue();
     await page.getByRole('button', { name: 'Đóng' }).click();
     return url;
   };
+  await page.getByRole('button', { name: 'GitHub' }).first().click();
+  await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click();
+  check('link không thu hồi được: cảnh báo rõ và bật sẵn mật khẩu chia sẻ',
+    (await page.getByTestId('inline-warning').textContent()).includes('Ai có link vẫn') &&
+    (await page.getByRole('switch', { name: 'Đặt mật khẩu chia sẻ' }).getAttribute('aria-checked')) === 'true');
+  await page.getByRole('button', { name: 'Đóng' }).click();
   const shareLink = await makeShare('GitHub', { expiry: '1 giờ' });
   check('tạo link chia sẻ dạng tự chứa', shareLink.startsWith(URL_) && shareLink.includes('#share=l.'), shareLink.slice(0, 60));
   const leakedInLink = ['p@ss-GitHub', 'GEZDGNBVGY3TQOJQ', 'user@example.com'].filter((x) => decodeURIComponent(shareLink).includes(x));

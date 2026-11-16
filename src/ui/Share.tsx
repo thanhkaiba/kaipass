@@ -38,7 +38,8 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
   const [expiry, setExpiry] = useState(EXPIRY[2][1]);
   const [withOtp, setWithOtp] = useState(!!item.otp);
   const [passphrase, setPassphrase] = useState('');
-  const [usePass, setUsePass] = useState(false);
+  // Links that cannot be revoked should not be enough on their own, so start with a passphrase.
+  const [usePass, setUsePass] = useState(!canShareOnDrive(drive));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [link, setLink] = useState<{ url: string; record: ShareRecord } | null>(null);
@@ -184,26 +185,27 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
               </div>
             )}
           </div>
-          {(item.attachments.length > 0 || !onDrive) && (
+          {!onDrive && (
+            <div className="warn small" role="note" data-testid="inline-warning">
+              <Icon name="alert" />
+              <span>
+                <strong>Link không thu hồi được, hạn dùng không chặn được người rành kỹ thuật.</strong> Ai có link vẫn
+                tự giải mã được sau khi hết hạn.{' '}
+                {usePass ? 'Gửi mật khẩu chia sẻ qua kênh khác với link.' : 'Nên bật mật khẩu chia sẻ.'}
+              </span>
+              <InfoTip
+                text={
+                  drive && !GOOGLE_API_KEY
+                    ? 'Link chứa dữ liệu (đã mã hoá) và khoá giải mã. Cấu hình Google API key để dùng link qua Drive: thu hồi được và file bị xoá sau khi hết hạn.'
+                    : 'Vault chỉ lưu trên thiết bị nên link chứa dữ liệu (đã mã hoá) và khoá giải mã bên trong.'
+                }
+              />
+            </div>
+          )}
+          {item.attachments.length > 0 && (
             <p className="note">
               <Icon name="info" />
-              <span>
-                {[
-                  item.attachments.length > 0 && 'Không kèm file đính kèm.',
-                  !onDrive && 'Link tự chứa: không thu hồi được.',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              </span>
-              {!onDrive && (
-                <InfoTip
-                  text={
-                    drive && !GOOGLE_API_KEY
-                      ? 'Chưa cấu hình Google API key nên link chứa dữ liệu (đã mã hoá) bên trong, và hạn dùng chỉ được KaiPass kiểm tra. Xem README để bật link thu hồi được.'
-                      : 'Vault đang chỉ lưu trên thiết bị nên link chứa dữ liệu (đã mã hoá) bên trong, và hạn dùng chỉ được KaiPass kiểm tra.'
-                  }
-                />
-              )}
+              <span>Không kèm file đính kèm.</span>
             </p>
           )}
           {error && (
