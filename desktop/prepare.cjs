@@ -12,6 +12,8 @@ if (!fs.existsSync(path.join(web, 'index.html'))) {
 }
 fs.rmSync(path.join(__dirname, 'app'), { recursive: true, force: true });
 fs.cpSync(web, path.join(__dirname, 'app'), { recursive: true });
+// The app icon; electron-builder makes the .icns and .ico from it.
+fs.mkdirSync(path.join(__dirname, 'build'), { recursive: true });
 fs.copyFileSync(path.join(root, 'public', 'icon-512.png'), path.join(__dirname, 'build', 'icon.png'));
 
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
