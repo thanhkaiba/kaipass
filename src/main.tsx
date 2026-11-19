@@ -21,3 +21,13 @@ window.visualViewport?.addEventListener('resize', () => {
   const el = document.activeElement;
   if (el instanceof HTMLElement && el.matches('input, textarea, select')) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
 });
+
+// Ctrl/⌘+A means "all the text in this box". Outside a box it would select the whole app (every
+// label and button), which is never wanted, so there it does nothing.
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'a') return;
+  const t = e.target;
+  if (t instanceof HTMLElement && t.isContentEditable) return;
+  e.preventDefault();
+  if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) t.select();
+});

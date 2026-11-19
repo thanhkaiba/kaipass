@@ -3082,3 +3082,24 @@ body {
   border-color: var(--border);
   background: var(--surface);
 }
+
+/* "Removed a field · Undo" in the editor */
+.undo-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.undo-bar strong {
+  color: var(--text);
+}
+
+.undo-bar button {
+  min-height: 30px;
+  flex: none;
+}

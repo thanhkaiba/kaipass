@@ -715,6 +715,35 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Đóng' }).click();
   check('logo Claude: gỡ được', (await avatarOf('Ngân hàng của mẹ').getAttribute('data-brand')) === null);
 
+  // ---- editing: a removed field can be taken back; Ctrl+A stays inside the box ----
+  await page.getByRole('button', { name: 'Visa VCB' }).first().click();
+  await page.getByRole('button', { name: 'Sửa' }).click();
+  const fieldNames = () => page.getByLabel('Tên trường').evaluateAll((els) => els.map((e) => e.value));
+  const beforeRemove = await fieldNames();
+  await page.locator('.custom-field', { has: page.locator('input[value="Số thẻ"]') }).getByRole('button', { name: 'Bỏ trường' }).click();
+  check('bỏ một trường: hiện nút Hoàn tác', (await page.locator('.undo-bar').textContent()).includes('Số thẻ') && !(await fieldNames()).includes('Số thẻ'));
+  check('bỏ trường xong con trỏ vẫn ở trong form', await page.waitForFunction(() => document.activeElement?.classList.contains('custom-name'), null, { timeout: 3000 }).then(() => true, () => false));
+  await page.keyboard.press('Control+z');
+  check('Ctrl+Z lấy lại trường vừa bỏ, đúng vị trí và giá trị', JSON.stringify(await fieldNames()) === JSON.stringify(beforeRemove) && (await page.getByLabel('Giá trị Số thẻ').inputValue()) === '4111111111111111' && (await page.locator('.undo-bar').count()) === 0);
+  await page.locator('.custom-field', { has: page.locator('input[value="Hết hạn"]') }).getByRole('button', { name: 'Bỏ trường' }).click();
+  await page.getByLabel('Tên', { exact: true }).fill('Visa VCB 2');
+  await page.keyboard.press('Control+z');
+  check('đã gõ chữ sau khi bỏ trường: Ctrl+Z hoàn tác chữ, không đụng tới trường', !(await fieldNames()).includes('Hết hạn'));
+  await page.getByRole('button', { name: 'Hoàn tác' }).click();
+  check('nút Hoàn tác vẫn lấy lại được trường', (await fieldNames()).includes('Hết hạn'));
+  await page.getByLabel('Ghi chú').fill('dòng ghi chú');
+  await page.keyboard.press('Control+a');
+  const inBox = await page.evaluate(() => ({ start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd, page: String(getSelection()) }));
+  check('Ctrl+A trong ô nhập: chỉ chọn chữ trong ô', inBox.start === 0 && inBox.end === 'dòng ghi chú'.length && inBox.page === 'dòng ghi chú', JSON.stringify(inBox));
+  await page.evaluate(() => {
+    document.activeElement.setSelectionRange(0, 0);
+    document.activeElement.blur();
+    getSelection().removeAllRanges();
+  });
+  await page.keyboard.press('Control+a');
+  check('Ctrl+A ngoài ô nhập: không chọn cả trang', (await page.evaluate(() => String(getSelection()))) === '');
+  await page.getByRole('button', { name: 'Huỷ' }).click();
+
   // ---- list order ----
   const firstTitle = () => page.locator('.item-title').first().textContent();
   const alphabetical = await firstTitle();

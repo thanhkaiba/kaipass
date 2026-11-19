@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { normalizeOtp } from '../lib/totp';
 import type { OtpAccount } from '../lib/qr';
 import type { Folder, ItemDraft, ItemField } from '../lib/vault';
@@ -31,6 +31,46 @@ export function ItemEditor({
   const setField = (i: number, patch: Partial<ItemField>) =>
     set({ fields: d.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
 
+  // Removing a field is one stray click away, so it can be taken back: with the "Hoàn tác" button,
+  // or with Ctrl/⌘+Z as long as nothing was typed since (after that, Ctrl+Z belongs to the text).
+  const form = useRef<HTMLFormElement>(null);
+  const [removed, setRemoved] = useState<{ at: number; field: ItemField }[]>([]);
+  const typedSince = useRef(false);
+  // Where the keyboard goes once the list of fields has been redrawn (set by remove / restore).
+  const [focusOn, setFocusOn] = useState<{ selector: string; index: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!focusOn) return;
+    form.current?.querySelectorAll<HTMLElement>(focusOn.selector)[focusOn.index]?.focus();
+    setFocusOn(null);
+  }, [focusOn]);
+
+  const removeField = (i: number) => {
+    setRemoved((r) => [...r, { at: i, field: d.fields[i] }]);
+    typedSince.current = false;
+    const left = d.fields.length - 1;
+    set({ fields: d.fields.filter((_, j) => j !== i) });
+    // The button just pressed is gone: keep the keyboard in the form, on the neighbouring field.
+    setFocusOn(left > 0 ? { selector: '.custom-name', index: Math.min(i, left - 1) } : { selector: '.add-field', index: 0 });
+  };
+
+  const restoreField = () => {
+    const last = removed.at(-1);
+    if (!last) return;
+    setRemoved((r) => r.slice(0, -1));
+    const fields = [...d.fields];
+    const at = Math.min(last.at, fields.length);
+    fields.splice(at, 0, last.field);
+    set({ fields });
+    setFocusOn({ selector: '.custom-value', index: at });
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z' && removed.length > 0 && !typedSince.current) {
+      e.preventDefault();
+      restoreField();
+    }
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!d.title.trim()) return setError('Cần nhập tên');
@@ -50,7 +90,7 @@ export function ItemEditor({
   };
 
   return (
-    <form className="detail editor" onSubmit={submit}>
+    <form className="detail editor" onSubmit={submit} ref={form} onKeyDown={onKeyDown} onInput={() => (typedSince.current = true)}>
       <header className="detail-head">
         <Avatar title={d.title} icon={d.type} url={d.url} size={48} />
         <div className="detail-title">
@@ -124,6 +164,7 @@ export function ItemEditor({
           <h3 className="grow">{d.type === 'login' ? 'Trường khác' : 'Thông tin'}</h3>
           <IconButton
             icon="plus"
+            className="add-field"
             label="Thêm trường"
             onClick={() => set({ fields: [...d.fields, { name: '', value: '', secret: false }] })}
           />
@@ -157,9 +198,21 @@ export function ItemEditor({
               pressed={f.secret}
               onClick={() => setField(i, { secret: !f.secret })}
             />
-            <IconButton icon="x" tone="danger" label="Bỏ trường" onClick={() => set({ fields: d.fields.filter((_, j) => j !== i) })} />
+            <IconButton icon="x" tone="danger" label="Bỏ trường" onClick={() => removeField(i)} />
           </div>
         ))}
+        {removed.length > 0 && (
+          <div className="undo-bar" role="status">
+            <Icon name="restore" />
+            <span className="grow">
+              Đã bỏ trường <strong>{removed.at(-1)!.field.name || '(chưa đặt tên)'}</strong>
+              {removed.length > 1 && ` và ${removed.length - 1} trường khác`}
+            </span>
+            <button type="button" onClick={restoreField} data-tip="Ctrl/⌘ + Z">
+              Hoàn tác
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="card">
