@@ -886,9 +886,24 @@ async function driveFlow(browser) {
   await a.page.getByRole('button', { name: 'Mở khoá' }).click();
   await waitStatus(a.page, 'auth');
   check('hết phiên Google: vẫn mở khoá được, báo cần đăng nhập lại', (await titles(a.page)).join() === want);
-  await status(a.page).click();
+  const authBar = a.page.locator('.auth-bar');
+  await authBar.waitFor();
+  const barBox = await authBar.boundingBox();
+  check('hết phiên Google: thanh báo chạy ngang cả app, ở trên cùng', barBox.y === 0 && barBox.width === 1280 && (await authBar.textContent()).includes('Phiên Google đã hết'));
+  await shot(a.page, '19-auth-bar');
+  await authBar.getByRole('button', { name: 'Để sau' }).click();
+  check('bấm "Để sau": thanh báo ẩn, còn icon đăng nhập lại', (await authBar.count()) === 0 && (await a.page.getByRole('button', { name: 'Đăng nhập lại Google' }).isVisible()));
+  await a.page.getByRole('button', { name: 'Đăng nhập lại Google' }).click();
   await waitStatus(a.page, 'synced');
-  check('bấm một lần là đồng bộ lại', true);
+  check('bấm icon là đăng nhập và đồng bộ lại', (await a.page.getByRole('button', { name: 'Đăng nhập lại Google' }).count()) === 0);
+  // The bar's own button does the same.
+  await a.page.evaluate(() => sessionStorage.clear());
+  await a.page.reload();
+  await a.page.getByLabel('Master password').fill(PW);
+  await a.page.getByRole('button', { name: 'Mở khoá' }).click();
+  await authBar.getByRole('button', { name: 'Đăng nhập lại' }).click();
+  await waitStatus(a.page, 'synced');
+  check('nút "Đăng nhập lại" trên thanh báo: một lần bấm là đồng bộ lại', (await authBar.count()) === 0);
 
   // Changing the master password on A: B is told what to do instead of silently failing.
   await a.page.getByRole('button', { name: 'Cài đặt' }).click();

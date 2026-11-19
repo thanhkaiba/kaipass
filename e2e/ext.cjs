@@ -123,7 +123,9 @@ const posts = [];
     check('extension tải được với ID cố định', (await ext.title()) === 'KaiPass');
     const tabId = await ext.evaluate(async (port) => (await chrome.tabs.query({ url: `http://localhost:${port}/*` }))[0].id, PORT);
     const popupUrl = `chrome-extension://${EXT_ID}/index.html?popup&tab=${tabId}`;
+    /** Opens the popup on its list, as if it had not been used for a while (see the "reopening" checks for the rest). */
     const openPopup = async () => {
+      await ext.evaluate(() => chrome.storage.session.remove('kaipass.view')).catch(() => {});
       await ext.goto(popupUrl);
       await ext.getByTestId('suggestions').or(ext.getByLabel('Master password')).first().waitFor();
     };
@@ -174,6 +176,8 @@ const posts = [];
     // Scanning the QR code shown in the page (the 2FA set-up screen of a site).
     await site.goto(`http://localhost:${PORT}/qr`);
     await site.bringToFront();
+    // A fresh window on the list (the other popup is still showing the item just saved).
+    await ext.evaluate(() => chrome.storage.session.remove('kaipass.view'));
     const scanWin = await (async () => {
       const [w] = await Promise.all([
         ctx.waitForEvent('page'),
@@ -247,6 +251,43 @@ const posts = [];
     await site.goto(`http://127.0.0.1:${PORT}/login`);
     await openPopup();
     check('site khác không được gợi ý đăng nhập này', (await ext.getByTestId('suggestions').textContent()).includes('Chưa có đăng nhập'));
+
+    // ---- reopening the popup: back where it was left ----
+    await site.goto(`http://localhost:${PORT}/login`);
+    await openPopup();
+    await ext.locator('.item', { hasText: 'Local site' }).first().click();
+    await ext.locator('.detail-title h2', { hasText: 'Local site' }).waitFor();
+    await ext.goto(popupUrl); // Chrome closes the popup when the user clicks elsewhere; this is it opening again
+    await ext.locator('.detail-title h2', { hasText: 'Local site' }).waitFor({ timeout: 5000 }).then(
+      () => check('mở lại popup: hiện lại mục đang xem', true),
+      () => check('mở lại popup: hiện lại mục đang xem', false),
+    );
+    await ext.getByRole('button', { name: 'Sửa' }).click();
+    await ext.getByLabel('Tên', { exact: true }).fill('Local site (đang sửa)');
+    await ext.getByLabel('Ghi chú').fill('gõ dở');
+    await ext.goto(popupUrl);
+    await ext.getByLabel('Tên', { exact: true }).waitFor({ timeout: 5000 }).catch(() => {});
+    check('mở lại popup khi đang sửa dở: giữ nguyên chữ đã gõ', (await ext.getByLabel('Tên', { exact: true }).inputValue().catch(() => '')) === 'Local site (đang sửa)' && (await ext.getByLabel('Ghi chú').inputValue().catch(() => '')) === 'gõ dở');
+    await ext.getByRole('button', { name: 'Huỷ' }).click();
+    await ext.goto(popupUrl);
+    await ext.locator('.detail-title h2', { hasText: 'Local site' }).waitFor({ timeout: 5000 });
+    check('huỷ sửa rồi mở lại: về mục đó, không còn bản nháp', (await ext.getByLabel('Ghi chú').count()) === 0 && (await ext.locator('.detail-title h2').textContent()) === 'Local site');
+    const otherTab = await ext.evaluate(async () => (await chrome.tabs.create({ url: 'about:blank', active: false })).id);
+    await ext.goto(`chrome-extension://${EXT_ID}/index.html?popup&tab=${otherTab}`);
+    await ext.locator('.items').waitFor();
+    check('mở popup ở tab khác: về danh sách', await ext.locator('.items').isVisible() && !(await ext.locator('.detail-title').isVisible()));
+    await ext.evaluate((id) => chrome.tabs.remove(id), otherTab);
+    await ext.goto(popupUrl);
+    await ext.locator('.item', { hasText: 'Local site' }).first().click();
+    await ext.locator('.detail-title h2', { hasText: 'Local site' }).waitFor();
+    await ext.getByRole('button', { name: 'Quay lại danh sách' }).click();
+    check('có lưu chỗ đang xem trong bộ nhớ của trình duyệt', (await ext.evaluate(async () => Object.keys(await chrome.storage.session.get('kaipass.view')).length)) === 1);
+    await ext.getByRole('button', { name: 'Khoá' }).click();
+    await ext.getByLabel('Master password').waitFor();
+    check('khoá vault thì quên luôn chỗ đang xem', (await ext.evaluate(async () => Object.keys(await chrome.storage.session.get('kaipass.view')).length)) === 0);
+    await ext.getByLabel('Master password').fill(PW);
+    await ext.getByRole('button', { name: 'Mở khoá', exact: true }).click();
+    await ext.getByTestId('suggestions').waitFor();
 
     // ---- in-page suggestions (content script) ----
     // These checks read what was filled, so the form must stay put: auto sign-in has its own section below.

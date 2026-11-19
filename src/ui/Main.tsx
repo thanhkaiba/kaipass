@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { currentTab, fillTab, matchesPage, openInTab, pageScore, touch, type PageTab } from '../ext/browser';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { currentTab, fillTab, loadView, matchesPage, openInTab, pageScore, saveView, touch, type PageTab } from '../ext/browser';
 import { native } from '../lib/android';
 import { isAndroid, isExtension, isPopup } from '../lib/platform';
 import { AndroidSave } from './AndroidSave';
@@ -95,6 +95,12 @@ export function Main({
   /** `true` opens Settings without a section in mind (a phone then lists the sections). */
   const [settings, setSettings] = useState<boolean | SettingsTab>(false);
   const [generating, setGenerating] = useState(false);
+  // "Để sau" on the signed-out bar: quiet until Google is signed out again.
+  const [skipAuth, setSkipAuth] = useState(false);
+  const authNeeded = session.status === 'auth';
+  useEffect(() => {
+    if (!authNeeded) setSkipAuth(false);
+  }, [authNeeded]);
   const narrow = useNarrow();
   const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<PageTab | undefined>();
@@ -120,10 +126,51 @@ export function Main({
   useEffect(() => setLogoOverrides(parseOverrides(vault.getSetting(LOGO_SETTING))), [vault, tick]);
   useEffect(() => () => setLogoOverrides({}), []);
 
-  // In the extension popup: find out which page we were opened on.
+  // In the extension popup: find out which page we were opened on, and pick up where the popup
+  // was left (Chrome closes it whenever the user clicks elsewhere).
+  const [ready, setReady] = useState(!isPopup);
+  const typing = useRef<ItemDraft | null>(null);
   useEffect(() => {
-    currentTab().then(setTab, () => {});
+    let alive = true;
+    void (async () => {
+      const t = await currentTab().catch(() => undefined);
+      if (!alive) return;
+      setTab(t);
+      const view = await loadView(t?.id).catch(() => undefined);
+      if (!alive) return;
+      if (view) {
+        const exists = (id: string | null | undefined) => !!id && !!vault.item(id);
+        if (view.draft && (!view.draft.id || exists(view.draft.id))) {
+          // An edit that was not saved: straight back into it, with what was typed.
+          setDraft((cur) => cur ?? view.draft);
+          setSelected(view.draft.id ?? null);
+          setPane('detail');
+          toast('Đã mở lại phần đang sửa dở');
+        } else if (!view.draft) {
+          setFilter(view.filter as Filter);
+          if (exists(view.selected)) {
+            setSelected(view.selected);
+            setPane(view.pane);
+          } else if (view.pane !== 'detail') {
+            setPane(view.pane);
+          }
+        }
+      }
+      setReady(true);
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const remember = (edit: ItemDraft | null = typing.current) => {
+    if (ready) void saveView({ at: Date.now(), tabId: tab?.id, selected, pane, filter, draft: draft ? (edit ?? draft) : null });
+  };
+  useEffect(() => {
+    if (!draft) typing.current = null;
+    remember();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, selected, pane, filter, draft, tab]);
 
   // Sync when the app comes back to the foreground or the network returns.
   useEffect(() => {
@@ -383,7 +430,27 @@ export function Main({
       </div>
   );
 
+  // A moment (a storage read) before the popup knows where it was left: show nothing rather than
+  // flash the list and then jump.
+  if (!ready) return <div className="app" aria-busy="true" />;
+
   return (
+    <div className="shell">
+      {/* Signed out of Google: said once, across the whole app, with a way back in and a way to carry on. */}
+      {session.status === 'auth' && !skipAuth && (
+        <div className="auth-bar" role="alert">
+          <Icon name="alert" />
+          <span className="grow">
+            <strong>Phiên Google đã hết.</strong> Thay đổi mới chỉ lưu trên máy này cho tới khi bạn đăng nhập lại.
+          </span>
+          <button type="button" className="primary" onClick={() => void session.sync(true)}>
+            <Icon name="login" /> Đăng nhập lại
+          </button>
+          <button type="button" onClick={() => setSkipAuth(true)}>
+            Để sau
+          </button>
+        </div>
+      )}
     <div className={`app pane-${pane}`}>
       <nav className="sidebar" aria-label="Bộ lọc">
         <div className="step-head">
@@ -448,6 +515,9 @@ export function Main({
             />
           </div>
           {isPopup && <IconButton icon="external" label="Mở trong tab" onClick={openInTab} />}
+          {session.status === 'auth' && (
+            <IconButton icon="cloud" tone="danger" label="Đăng nhập lại Google" tip="Phiên Google đã hết. Bấm để đăng nhập lại và đồng bộ." className="needs-auth" onClick={() => void session.sync(true)} />
+          )}
           <IconButton icon="lock" label="Khoá" className="only-narrow" onClick={() => onLock(session)} />
           <div className="menu-wrap">
             <button
@@ -605,6 +675,10 @@ export function Main({
             folders={folders}
             onSave={save}
             onImportMany={importMany}
+            onChange={(d) => {
+              typing.current = d;
+              remember(d);
+            }}
             onCancel={() => {
               setDraft(null);
               if (!current) setPane('list');
@@ -711,6 +785,7 @@ export function Main({
           onReplace={onReplace}
         />
       )}
+    </div>
     </div>
   );
 }

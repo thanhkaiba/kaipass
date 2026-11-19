@@ -25,8 +25,9 @@ bạn. Không có server, không có phí hằng tháng.
 - **iPhone chưa có tự điền.** Tạm thời, mở cùng file `kaipass.kdbx` trên Google Drive bằng
   KeePassium. Android thì dùng app KaiPass (xem phần Android).
 - **Quên master password mà chưa tạo khoá khôi phục là mất dữ liệu.** Xem phần khoá khôi phục.
-- Phiên đăng nhập Google hết hạn sau khoảng một giờ. Khi đó app vẫn dùng được, chỉ cần bấm
-  "Đăng nhập Google để đồng bộ" một lần.
+- Phiên đăng nhập Google hết hạn sau khoảng một giờ (bản web và extension). Khi đó một thanh báo
+  hiện trên cùng của app với nút **Đăng nhập lại**; bấm **Để sau** để làm tiếp, thay đổi vẫn được lưu
+  trên máy và sẽ lên Drive khi bạn đăng nhập lại (icon đám mây cạnh ô tìm kiếm).
 - App chỉ thấy file do chính nó tạo trên Drive (quyền `drive.file`). Vì vậy hãy tạo vault từ app
   này trước, rồi mới mở file đó bằng app KeePass khác.
 
@@ -108,6 +109,9 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
   điền, bấm nút đăng nhập, rồi tự điền tiếp ở các bước sau trong cùng tab: mật khẩu (với trang hỏi
   email trước) và mã OTP. Mỗi bước chỉ làm một lần trong hai phút, nên mật khẩu hay mã bị từ chối
   không bao giờ bị gửi lại. Tắt ở Cài đặt → Gợi ý trên web → *Tự đăng nhập sau khi điền*.
+- **Mở lại đúng chỗ:** Chrome đóng cửa sổ nhỏ của extension mỗi khi bạn bấm ra ngoài. Mở lại trong
+  vòng 3 phút ở cùng tab thì KaiPass hiện lại mục đang xem; nếu đang sửa dở thì giữ nguyên chữ đã gõ
+  (trong 30 phút). Thông tin này chỉ nằm trong bộ nhớ của trình duyệt và mất khi vault khoá.
 - **Từ thanh công cụ:** bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`),
   bấm **Điền** ở tài khoản muốn dùng.
 - Mã OTP được điền khi trang có ô nhập mã. Nếu ô đó ở bước sau, KaiPass tự điền tiếp khi bạn đã

@@ -3103,3 +3103,49 @@ body {
   min-height: 30px;
   flex: none;
 }
+
+/* ==== the app's frame: an optional bar across the top, then the panes ==== */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.shell > .app {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+/* Signed out of Google */
+.auth-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, var(--border));
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.auth-bar > .icon {
+  flex: none;
+}
+
+.auth-bar .grow {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.auth-bar button {
+  min-height: 32px;
+  flex: none;
+}
+
+.iconbtn.needs-auth {
+  color: var(--warn);
+  background: var(--warn-soft);
+}

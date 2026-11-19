@@ -1,6 +1,6 @@
 import { forcedTabId, isExtension, isPopup, memory } from '../lib/platform';
 import { parseOtp, totp } from '../lib/totp';
-import type { Item, Vault } from '../lib/vault';
+import type { Item, ItemDraft, Vault } from '../lib/vault';
 import { LOGO_SETTING, parseOverrides } from '../lib/brandMatch';
 import { fillPage, type FillResult } from './fill';
 import { FILL_INDEX_KEY, hostMatches, hostOf, matchScore, UNLOCK_KEY, type FillEntry, type UnlockRecord } from './match';
@@ -100,6 +100,47 @@ export async function forget(): Promise<void> {
   if (!isExtension) return;
   await memory.remove(UNLOCK_KEY);
   await memory.remove(FILL_INDEX_KEY);
+  await memory.remove(VIEW_KEY);
+}
+
+// ---- reopening the popup where it was left ----
+
+/**
+ * Chrome destroys the toolbar popup whenever it loses focus. What the user was looking at (and
+ * anything they were in the middle of typing) is kept next to the unlock record: in the browser's
+ * memory-only session storage, and gone as soon as the vault locks.
+ */
+export interface PopupView {
+  at: number;
+  /** The tab the popup was opened on. */
+  tabId?: number;
+  selected: string | null;
+  pane: 'nav' | 'list' | 'detail';
+  /** The list filter, as Main keeps it. */
+  filter: unknown;
+  /** An edit not saved yet. */
+  draft: ItemDraft | null;
+}
+
+const VIEW_KEY = 'kaipass.view';
+/** How long a plain view is worth coming back to; after that the popup opens on the list again. */
+const VIEW_FOR_MS = 3 * 60_000;
+/** Unsaved typing is kept much longer: losing it costs the user real work. */
+const DRAFT_FOR_MS = 30 * 60_000;
+
+export async function saveView(view: PopupView): Promise<void> {
+  if (isPopup) await memory.set(VIEW_KEY, view);
+}
+
+/** The view to reopen, or undefined when there is none worth restoring for this tab. */
+export async function loadView(tabId: number | undefined): Promise<PopupView | undefined> {
+  if (!isPopup) return undefined;
+  const v = await memory.get<PopupView>(VIEW_KEY);
+  if (!v) return undefined;
+  const age = Date.now() - v.at;
+  if (v.draft && age < DRAFT_FOR_MS) return v;
+  if (v.tabId === tabId && age < VIEW_FOR_MS) return { ...v, draft: null };
+  return undefined;
 }
 
 /** Pushes the auto-lock deadline back; call on user activity. */

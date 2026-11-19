@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { normalizeOtp } from '../lib/totp';
 import type { OtpAccount } from '../lib/qr';
 import type { Folder, ItemDraft, ItemField } from '../lib/vault';
@@ -12,6 +12,7 @@ export function ItemEditor({
   onSave,
   onCancel,
   onImportMany,
+  onChange,
 }: {
   initial: ItemDraft;
   folders: Folder[];
@@ -19,6 +20,8 @@ export function ItemEditor({
   onCancel: () => void;
   /** A Google Authenticator export holds several accounts: add them all as new items. */
   onImportMany?: (accounts: OtpAccount[]) => void;
+  /** Every change to the form as it is typed, so an edit in progress can survive the window closing. */
+  onChange?: (d: ItemDraft) => void;
 }) {
   const [scanning, setScanning] = useState(false);
   const toast = useToast();
@@ -28,6 +31,10 @@ export function ItemEditor({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<ItemDraft>) => setD((cur) => ({ ...cur, ...patch }));
+  useEffect(() => {
+    onChange?.({ ...d, tags: tags.split(',').map((t) => t.trim()).filter(Boolean) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d, tags]);
   const setField = (i: number, patch: Partial<ItemField>) =>
     set({ fields: d.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
 
