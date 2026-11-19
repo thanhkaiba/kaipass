@@ -66,6 +66,10 @@ export const androidInfo = () => native<AndroidInfo>('info');
 
 /** A login typed into an app or page that autofill handed over to save. */
 export interface PendingSave {
+  /** Identifies this entry in the app's waiting list. */
+  id: string;
+  /** KaiPass generated this password on a sign-up form (rather than the user typing it). */
+  generated?: boolean;
   domain: string | null;
   package: string;
   appLabel: string;

@@ -223,11 +223,8 @@ abstract class WebHostActivity : FragmentActivity() {
                 }
                 ok(true)
             }
-            "pendingSave" -> ok(Pending.save?.let {
-                JSONObject().put("domain", it.target.domain ?: JSONObject.NULL).put("package", it.target.packageName)
-                    .put("appLabel", it.appLabel).put("username", it.username).put("password", it.password)
-            })
-            "saveDone" -> { Pending.save = null; ok(true); onSaveDone() }
+            "pendingSave" -> ok(PendingStore.next(this)?.toJson())
+            "saveDone" -> { PendingStore.remove(this, args.optString("id")); ok(true); onSaveDone() }
             else -> fail("Không hỗ trợ: $method")
         }
     }

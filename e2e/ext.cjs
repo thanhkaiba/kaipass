@@ -64,6 +64,8 @@ const PAGES = {
   '/react': `<div id="out"></div><input id="u" autocomplete="username"><input id="p" type="password" autocomplete="current-password">
     <script>for (const id of ['u','p']) document.getElementById(id).addEventListener('input', (e) => { document.getElementById('out').dataset[id] = e.target.value; });</script>`,
   '/signup': `<form><input name="search" placeholder="Search"></form><form><input name="username"><input name="new" type="password" autocomplete="new-password"><input name="confirm" type="password" autocomplete="new-password"></form>`,
+  '/register': `<h1>Create your account</h1><form method="post" action="/welcome"><input name="fullname" placeholder="Full name"><input name="email" type="email" placeholder="Email"><input name="password" type="password" placeholder="Password"><input name="password_confirm" type="password" placeholder="Confirm password"><button type="submit">Create account</button></form>`,
+  '/change': `<form method="post" action="/welcome"><input name="current" type="password" autocomplete="current-password"><input name="newpw" type="password" placeholder="New password"><input name="again" type="password" placeholder="Repeat"><button type="submit">Save</button></form>`,
   '/user-first': `<form><input name="identifier" type="text" autocomplete="username"><button>Next</button></form>`,
   '/otp': `<form><input name="code" autocomplete="one-time-code" inputmode="numeric"></form>`,
   '/digits': `<form>${'<input class="d" maxlength="1" inputmode="numeric">'.repeat(6)}</form>`,
@@ -337,6 +339,44 @@ const PAGES = {
     await waitIndex((list) => list.some((e) => e.password === 'pw-bob-2'));
     const bob2 = (await fillIndex()).filter((e) => e.hosts.includes('127.0.0.1'));
     check('cập nhật mật khẩu, không tạo mục trùng', bob2.length === 1 && bob2[0].password === 'pw-bob-2');
+
+    // ---- a strong password suggested wherever a new one is asked for ----
+    await site.goto(`${ip}/register`);
+    await site.locator('[name=email]').fill('dave@example.com');
+    await site.locator('[name=password]').click();
+    await ui.locator('.panel .gen').waitFor({ state: 'visible', timeout: 10000 });
+    const first = await ui.locator('.panel .gen .pw').textContent();
+    check('ô mật khẩu mới: gợi ý mật khẩu mạnh 20 ký tự', first.length === 20 && /[A-Z]/.test(first) && /[a-z]/.test(first) && /[0-9]/.test(first), first);
+    if (shots) await site.screenshot({ path: join(shots, 'inline-generate.png') });
+    await ui.locator('.panel .again').click();
+    const strong = await ui.locator('.panel .gen .pw').textContent();
+    check('bấm ↻ ra mật khẩu khác', strong !== first && strong.length === 20);
+    await ui.locator('.panel .wide').click();
+    check('điền vào cả ô mật khẩu và ô nhập lại', (await site.locator('[name=password]').inputValue()) === strong && (await site.locator('[name=password_confirm]').inputValue()) === strong);
+    await saveCard.waitFor({ state: 'visible', timeout: 10000 });
+    check('hỏi lưu ngay khi dùng mật khẩu vừa tạo', (await saveCard.textContent()).includes('dave@example.com') && !(await saveCard.textContent()).includes(strong));
+    await saveCard.getByRole('button', { name: 'Lưu', exact: true }).click();
+    await waitIndex((list) => list.some((e) => e.username === 'dave@example.com'));
+    check('mật khẩu vừa tạo nằm trong vault', (await fillIndex()).find((e) => e.username === 'dave@example.com').password === strong);
+    await site.getByRole('button', { name: 'Create account' }).click();
+    await site.waitForURL(/\/welcome$/);
+    await site.waitForTimeout(1500);
+    check('gửi form sau đó không hỏi lưu lần nữa, không tạo mục trùng', !(await saveCard.isVisible()) && (await fillIndex()).filter((e) => e.password === strong).length === 1);
+
+    await site.goto(`${ip}/change`);
+    await site.locator('[name=current]').fill('pw-bob-2');
+    await site.locator('[name=newpw]').click();
+    await ui.locator('.panel .gen').waitFor({ state: 'visible', timeout: 10000 });
+    const changed = await ui.locator('.panel .gen .pw').textContent();
+    await ui.locator('.panel .wide').click();
+    check('form đổi mật khẩu: chỉ điền ô mới và ô nhập lại, giữ nguyên ô mật khẩu cũ', (await site.locator('[name=current]').inputValue()) === 'pw-bob-2' && (await site.locator('[name=newpw]').inputValue()) === changed && (await site.locator('[name=again]').inputValue()) === changed);
+    await saveCard.waitFor({ state: 'visible', timeout: 10000 });
+    await saveCard.getByRole('button', { name: 'Để sau' }).click();
+
+    await site.goto(`${ip}/signin`);
+    await site.locator('[name=password]').click();
+    await ui.locator('.panel .row').first().waitFor({ state: 'visible', timeout: 10000 });
+    check('ô mật khẩu đăng nhập thường: hiện tài khoản đã lưu, không gợi ý tạo mới', (await ui.locator('.panel .gen').count()) === 0);
 
     await site.goto(`${ip}/username-step`);
     await site.locator('[name=identifier]').fill('carol');

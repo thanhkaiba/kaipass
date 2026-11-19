@@ -116,6 +116,9 @@ async function judge(host: string, username: string, password: string): Promise<
   // A username-less capture matching a saved password is also nothing new.
   if (!username && entries.some((e) => e.password === password)) return { prompt: null };
   if (same.length > 0) return { prompt: 'update', id: same[0].id };
+  // Saved a moment ago with a generated password, before the username was typed: complete it.
+  const nameless = entries.find((e) => !e.username && e.password === password);
+  if (username && nameless) return { prompt: 'update', id: nameless.id };
   if (!username && entries.length === 1) return { prompt: 'update', id: entries[0].id };
   return { prompt: 'new' };
 }

@@ -41,6 +41,8 @@ export function AndroidSave({ session }: { session: Session }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // Bumped after each answer, to pick up the next login waiting (there can be several).
+  const [round, setRound] = useState(0);
 
   useEffect(() => {
     const check = () =>
@@ -55,8 +57,9 @@ export function AndroidSave({ session }: { session: Session }) {
         })
         .catch(() => {});
     check();
-    return onNative('pendingSave', check);
-  }, []);
+    const offs = [onNative('pendingSave', check), onNative('resume', check)];
+    return () => offs.forEach((off) => off());
+  }, [round]);
 
   if (!pending) return null;
   const where = pending.domain ?? pending.appLabel;
@@ -66,7 +69,9 @@ export function AndroidSave({ session }: { session: Session }) {
 
   const finish = (saved: boolean) => {
     setPending(null);
-    void native('saveDone', { saved }).catch(() => {});
+    void native('saveDone', { id: pending.id, saved })
+      .catch(() => {})
+      .then(() => setRound((r) => r + 1));
   };
 
   const save = async () => {
@@ -107,6 +112,12 @@ export function AndroidSave({ session }: { session: Session }) {
         </div>
         <TextInput label="Tên đăng nhập" value={username} onChange={setUsername} />
         <SecretInput label="Mật khẩu" value={password} onChange={setPassword} />
+        {pending.generated && !unchanged && (
+          <p className="note">
+            <Icon name="dice" />
+            <span>KaiPass đã tạo mật khẩu này và điền vào {where}. Lưu lại để không bị mất.</span>
+          </p>
+        )}
         {unchanged && <p className="muted small">Mật khẩu này đã được lưu rồi.</p>}
         {error && (
           <p className="error" role="alert">

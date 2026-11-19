@@ -1,10 +1,10 @@
 package io.github.thanhkaiba.kaipass
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.CancellationSignal
-import android.os.SystemClock
 import android.service.autofill.AutofillService
 import android.service.autofill.FillCallback
 import android.service.autofill.FillRequest
@@ -46,7 +46,7 @@ class KaiPassAutofillService : AutofillService() {
                 StructureParser.parse(ctx.structure).let { p -> p.valueOf(p.form.username).takeIf(String::isNotEmpty) }
             } ?: ""
         }
-        Pending.save = PendingSave(parsed.target, appLabel(parsed.packageName), username, password, SystemClock.elapsedRealtime())
+        PendingStore.add(this, PendingSave.new(parsed.target, appLabel(this, parsed.packageName), username, password, generated = false))
         val intent = Intent(this, MainActivity::class.java)
             .setAction(MainActivity.ACTION_SAVE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -59,9 +59,11 @@ class KaiPassAutofillService : AutofillService() {
         }
     }
 
-    private fun appLabel(pkg: String): String = try {
-        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
-    } catch (e: PackageManager.NameNotFoundException) {
-        pkg
+    companion object {
+        fun appLabel(c: Context, pkg: String): String = try {
+            c.packageManager.getApplicationLabel(c.packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (e: PackageManager.NameNotFoundException) {
+            pkg
+        }
     }
 }

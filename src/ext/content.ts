@@ -7,6 +7,7 @@
  * Everything it draws lives in a closed shadow root so the page cannot read or restyle it, and it
  * only acts on real (trusted) clicks and key presses.
  */
+import { defaultGen, generatePassword } from '../lib/generator';
 import { fillPage } from './fill';
 import type { FillReply, Request, SavePromptReply, StateReply, SuggestItem } from './match';
 
@@ -42,7 +43,53 @@ declare const __KAIPASS_TEST__: boolean;
       (el) => visible(el) && el.autocomplete !== 'new-password',
     );
 
-  type FieldRole = 'username' | 'password' | 'otp';
+  type FieldRole = 'username' | 'password' | 'otp' | 'newpassword';
+
+  // ---- fields that set a new password (sign-up, change or reset password) ----
+
+  const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const NEW_WORDS = /new|moi($|[^a-z])|create|choose/;
+  const CONFIRM_WORDS = /confirm|repeat|retype|again|verify|re-?enter|nhap.?lai|xac.?nhan|pass(word)?.?2/;
+  const CURRENT_WORDS = /current|old|existing|hien.?tai|(^|[^a-z])cu($|[^a-z])/;
+  const SIGNUP_WORDS = /sign.?up|register|registration|create.?account|new.?account|join|dang.?ky|tao.?tai.?khoan|reset.?pass|change.?pass|doi.?mat.?khau|dat.?lai/;
+
+  /** Whether a form with a single password box is for making an account or a new password. */
+  function looksLikeSignup(el: HTMLInputElement): boolean {
+    const form = el.form;
+    const labels = form
+      ? Array.from(form.querySelectorAll<HTMLElement>('button, input[type=submit], [role=button]')).map((b) => `${b.textContent ?? ''} ${(b as HTMLInputElement).value ?? ''}`)
+      : [];
+    return SIGNUP_WORDS.test(fold([form?.getAttribute('action') ?? '', form?.id ?? '', form?.className ?? '', form?.getAttribute('name') ?? '', location.pathname, ...labels].join(' ')));
+  }
+
+  /**
+   * The boxes a newly generated password belongs in (the new password and its confirmation), given
+   * one of them. Empty when `el` is a box for a password the user already has.
+   */
+  function newPasswordFields(el: HTMLInputElement): HTMLInputElement[] {
+    if (kind(el) !== 'password') return [];
+    const h = (i: HTMLInputElement) => fold(hint(i));
+    const all = Array.from((el.form ?? document).querySelectorAll<HTMLInputElement>('input[type=password]')).filter(
+      (i) => visible(i) && !i.disabled && !i.readOnly && i.autocomplete !== 'one-time-code' && !OTP_WORDS.test(hint(i)),
+    );
+    const isCurrent = (i: HTMLInputElement) => i.autocomplete === 'current-password' || CURRENT_WORDS.test(h(i));
+    const isNew = (i: HTMLInputElement) => i.autocomplete === 'new-password' || NEW_WORDS.test(h(i));
+    const isConfirm = (i: HTMLInputElement) => CONFIRM_WORDS.test(h(i));
+    let fresh: HTMLInputElement[];
+    if (all.length === 1) {
+      fresh = !isCurrent(all[0]) && (isNew(all[0]) || looksLikeSignup(all[0])) ? all : [];
+    } else if (all.length === 2) {
+      const [a, b] = all;
+      if (isCurrent(a)) fresh = [b];
+      else if (isConfirm(b) || isNew(a)) fresh = all; // password + confirmation
+      else if (isNew(b)) fresh = [b]; // current + new
+      else fresh = all;
+    } else {
+      // Usually: current, new, confirmation.
+      fresh = all.some(isCurrent) || !isNew(all[0]) ? all.filter((i, n) => !isCurrent(i) && (n > 0 || isNew(i))) : all;
+    }
+    return fresh.includes(el) ? fresh : [];
+  }
 
   function roleOf(el: EventTarget | null): FieldRole | null {
     if (!(el instanceof HTMLInputElement) || el.disabled || el.readOnly || !visible(el)) return null;
@@ -50,7 +97,10 @@ declare const __KAIPASS_TEST__: boolean;
     if (el.autocomplete === 'one-time-code' || ((textLike(el) || kind(el) === 'password') && OTP_WORDS.test(h) && !USER_WORDS.test(h))) {
       return 'otp';
     }
-    if (kind(el) === 'password') return el.autocomplete === 'new-password' ? null : 'password';
+    if (kind(el) === 'password') {
+      if (newPasswordFields(el).length) return 'newpassword';
+      return el.autocomplete === 'new-password' ? null : 'password';
+    }
     if (!textLike(el)) return null;
     if (el.autocomplete === 'username') return 'username';
     if (USER_WORDS.test(h) || kind(el) === 'email') {
@@ -96,6 +146,11 @@ declare const __KAIPASS_TEST__: boolean;
   .row:hover, .row:focus-visible { background: #e9f0ff; outline: none; }
   .avatar { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px;
     background: #eef1f6; color: #2f6bff; font-weight: 700; }
+  .gen { display: flex; align-items: center; gap: 6px; margin: 0 4px 8px; padding: 8px 6px 8px 10px; border-radius: 8px; background: #eef1f6; }
+  .gen .pw { flex: 1; min-width: 0; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; user-select: all; }
+  .gen .again { flex: none; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #5d667a; font-size: 16px; line-height: 1; }
+  .gen .again:hover { background: #dfe5ef; }
+  .wide { display: block; width: calc(100% - 8px); margin: 0 4px 4px; padding: 9px 12px; border: 0; border-radius: 8px; background: #2f6bff; color: #fff; font-weight: 600; }
   .avatar.brand { font-size: 12px; box-shadow: inset 0 0 0 1px rgb(127 127 127 / 18%); }
   .avatar.brand svg { width: 17px; height: 17px; display: block; }
   .text { display: flex; flex-direction: column; min-width: 0; }
@@ -121,6 +176,9 @@ declare const __KAIPASS_TEST__: boolean;
     .who { background: #242a38 !important; }
     .row:hover, .row:focus-visible { background: #1f2d4a; }
     .avatar:not(.brand) { background: #242a38; color: #6a9cf5; }
+    .gen { background: #242a38; }
+    .gen .again { color: #9aa3b8; }
+    .gen .again:hover { background: #323a4c; }
     .user, .note, .head .sub, .x { color: #9aa3b8; }
     .x:hover { background: #242a38; }
   }
@@ -251,6 +309,30 @@ declare const __KAIPASS_TEST__: boolean;
     toast.style.display = 'none';
   }
 
+  const put = (input: HTMLInputElement, value: string) => {
+    // Frameworks such as React watch the native setter, not plain assignment.
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (setter) setter.call(input, value);
+    else input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  /** Puts a generated password in the new-password box and its confirmation, then offers to save it. */
+  function useGenerated(value: string) {
+    const target = field;
+    if (!target) return;
+    const boxes = newPasswordFields(target);
+    for (const b of boxes.length ? boxes : [target]) put(b, value);
+    panel.style.display = 'none';
+    // Ask to save straight away, so the password cannot be lost if the page moves on. Submitting
+    // the form later asks again only if it was not saved (or the username was typed afterwards).
+    const username = usernameNear(target, target.form ?? document);
+    void ask<SavePromptReply>({ type: 'captured', username, password: value }).then((reply) => {
+      if (reply?.prompt) showSaveCard(reply);
+    });
+  }
+
   async function openPanel() {
     if (!field) return;
     const s = await refresh();
@@ -263,7 +345,23 @@ declare const __KAIPASS_TEST__: boolean;
     panel.append(head);
     const role = roleOf(field);
     const items = role === 'otp' ? s.items.filter((i) => i.hasOtp) : s.items;
-    if (s.locked) {
+    if (role === 'newpassword' && !s.locked) {
+      // A box for a new password: offer a strong one instead of the saved logins.
+      let value = generatePassword(defaultGen);
+      const box = el('div', 'gen');
+      const shown = el('span', 'pw', value);
+      const again = el('button', 'again', '↻');
+      again.setAttribute('aria-label', 'Tạo mật khẩu khác');
+      again.title = 'Tạo mật khẩu khác';
+      onTrusted(again, () => {
+        value = generatePassword(defaultGen);
+        shown.textContent = value;
+      });
+      box.append(shown, again);
+      const use = el('button', 'wide', 'Dùng mật khẩu mạnh này');
+      onTrusted(use, () => useGenerated(value));
+      panel.append(el('div', 'note', 'KaiPass tạo mật khẩu mới cho bạn:'), box, use);
+    } else if (s.locked) {
       panel.append(el('div', 'note', 'KaiPass đang khoá.'));
       const b = el('button', 'action', 'Mở khoá');
       onTrusted(b, () => void ask({ type: 'open' }));
@@ -286,6 +384,9 @@ declare const __KAIPASS_TEST__: boolean;
   let toastShown = false;
   async function maybeToast() {
     if (!isTop || toastShown || !hasLoginFields()) return;
+    // A sign-up or change-password page is not the place to suggest signing in.
+    const boxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[type=password]')).filter(visible);
+    if (boxes.length && boxes.every((b) => roleOf(b) === 'newpassword')) return;
     const s = await refresh();
     if (!s || s.locked || !s.prefs.toast || s.items.length === 0 || toastShown) return;
     toastShown = true;
@@ -464,7 +565,8 @@ declare const __KAIPASS_TEST__: boolean;
       if (roleOf(target)) {
         void refresh().then(() => {
           showField(target as HTMLInputElement);
-          if (state && !state.locked && state.items.length > 0) void openPanel();
+          const wantsNew = roleOf(target) === 'newpassword' && !(target as HTMLInputElement).value;
+          if (state && !state.locked && (state.items.length > 0 || wantsNew)) void openPanel();
         });
       } else if (!e.composedPath().includes(host)) {
         panel.style.display = 'none';

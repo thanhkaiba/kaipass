@@ -18,7 +18,8 @@ import {
   type SharedItem,
 } from '../lib/share';
 import type { Item } from '../lib/vault';
-import { Avatar, Brand, CopyBtn, errorText, Icon, IconButton, InfoTip, Modal, OtpCode, SecretInput, useToast } from './bits';
+import { generatePassword } from '../lib/generator';
+import { Avatar, Brand, CopyBtn, copyText, errorText, Icon, IconButton, InfoTip, Modal, OtpCode, SecretInput, useToast } from './bits';
 import { fieldLabel } from './types';
 
 const EXPIRY: [string, number][] = [
@@ -181,7 +182,32 @@ export function ShareDialog({ item, drive, onClose }: { item: Item; drive?: Driv
             </div>
             {usePass && (
               <div className="setting-panel">
-                <SecretInput label="Mật khẩu chia sẻ" hideLabel placeholder="Mật khẩu chia sẻ" value={passphrase} onChange={setPassphrase} autoComplete="new-password" autoFocus />
+                <SecretInput
+                  label="Mật khẩu chia sẻ"
+                  hideLabel
+                  placeholder="Mật khẩu chia sẻ"
+                  value={passphrase}
+                  onChange={setPassphrase}
+                  autoComplete="new-password"
+                  autoFocus
+                  mono
+                  extra={
+                    <IconButton
+                      icon="dice"
+                      label="Tạo mật khẩu chia sẻ"
+                      tip="Tạo mật khẩu và chép sẵn để gửi qua kênh khác"
+                      onClick={() => {
+                        // Short enough to read out or type, still far beyond guessing.
+                        const made = generatePassword({ length: 14, upper: true, lower: true, digits: true, symbols: false });
+                        setPassphrase(made);
+                        void copyText(made, true).then(
+                          () => toast('Đã tạo và chép mật khẩu chia sẻ'),
+                          () => toast('Đã tạo mật khẩu chia sẻ'),
+                        );
+                      }}
+                    />
+                  }
+                />
               </div>
             )}
           </div>

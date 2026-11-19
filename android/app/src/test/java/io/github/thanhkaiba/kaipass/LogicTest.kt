@@ -133,3 +133,86 @@ class ClassifierTest {
         assertTrue(Classifier.classify(listOf(FieldInfo(hints = listOf("creditCardNumber")))).isEmpty)
     }
 }
+
+class NewPasswordTest {
+    private val PW = 0x81
+    private fun pw(vararg words: String, autocomplete: String? = null, hints: List<String> = emptyList()) =
+        FieldInfo(inputType = PW, words = words.toList(), autocomplete = autocomplete, hints = hints, htmlType = if (autocomplete != null) "password" else null)
+
+    @Test fun signInFormHasNone() {
+        val f = Classifier.classify(listOf(FieldInfo(hints = listOf("username")), pw("password")))
+        assertTrue(f.newPassword.isEmpty())
+        assertTrue(Classifier.classify(listOf(pw("pass", autocomplete = "current-password"))).newPassword.isEmpty())
+    }
+
+    @Test fun signUpWithConfirmation() {
+        val f = Classifier.classify(listOf(FieldInfo(inputType = 0x21, words = listOf("email")), pw("password"), pw("confirm_password")))
+        assertEquals(listOf(1, 2), f.newPassword)
+        assertEquals(listOf(0), f.username)
+    }
+
+    @Test fun hintedSingleField() {
+        assertEquals(listOf(0), Classifier.classify(listOf(pw("pw", autocomplete = "new-password"))).newPassword)
+        assertEquals(listOf(0), Classifier.classify(listOf(pw("pw", hints = listOf("newPassword")))).newPassword)
+        assertEquals(listOf(0), Classifier.classify(listOf(pw("Mật khẩu mới"))).newPassword)
+    }
+
+    @Test fun changePasswordKeepsTheCurrentOne() {
+        val three = Classifier.classify(listOf(pw("current"), pw("new_password"), pw("repeat")))
+        assertEquals(listOf(1, 2), three.newPassword)
+        val two = Classifier.classify(listOf(pw("old_password"), pw("password")))
+        assertEquals(listOf(1), two.newPassword)
+        val unlabelled = Classifier.classify(listOf(pw("pass1", autocomplete = "current-password"), pw("pass2", autocomplete = "new-password"), pw("pass3", autocomplete = "new-password")))
+        assertEquals(listOf(1, 2), unlabelled.newPassword)
+    }
+}
+
+class PasswordGenTest {
+    @Test fun strongAndVaried() {
+        val seen = HashSet<String>()
+        repeat(200) {
+            val p = PasswordGen.generate()
+            assertEquals(20, p.length)
+            assertTrue(p.any { it.isUpperCase() } && p.any { it.isLowerCase() } && p.any { it.isDigit() } && p.any { !it.isLetterOrDigit() })
+            assertTrue("no look-alike characters", p.none { it in "O0Il1" })
+            seen += p
+        }
+        assertEquals(200, seen.size)
+        assertEquals(8, PasswordGen.generate(8).length)
+    }
+}
+
+class PendingQueueTest {
+    private val web = Target("example.com", "com.android.chrome")
+    private fun item(user: String, pass: String, generated: Boolean, at: Long = 1000, target: Target = web) = PendingSave.new(target, "Chrome", user, pass, generated, at)
+
+    @Test fun samePasswordForSamePlaceIsOneEntry() {
+        val made = item("", "Gen-1", generated = true)
+        // Android's own save prompt later reports the same password, now with the username.
+        val list = PendingQueue.add(PendingQueue.add(emptyList(), made), item("dave@example.com", "Gen-1", generated = false))
+        assertEquals(1, list.size)
+        assertEquals(made.id, list[0].id)
+        assertEquals("dave@example.com", list[0].username)
+        assertTrue(list[0].generated)
+    }
+
+    @Test fun differentPlacesOrPasswordsStaySeparate() {
+        var list = PendingQueue.add(emptyList(), item("a", "p1", false))
+        list = PendingQueue.add(list, item("a", "p2", false))
+        list = PendingQueue.add(list, item("a", "p1", false, target = Target(null, "vn.zalo")))
+        assertEquals(3, list.size)
+    }
+
+    @Test fun generatedPasswordsOutliveTypedOnes() {
+        val day = 24 * 3_600_000L
+        val list = listOf(item("a", "typed", false, at = 0), item("b", "made", true, at = 0))
+        assertEquals(listOf("made"), PendingQueue.fresh(list, 2 * day).map { it.password })
+        assertTrue(PendingQueue.fresh(list, 40 * day).isEmpty())
+    }
+
+    @Test fun survivesBeingStored() {
+        val a = item("u", "p@ss \"quoted\"", true, target = Target(null, "vn.zalo"))
+        assertEquals(a, PendingSave.fromJson(org.json.JSONObject(a.toJson().toString())))
+    }
+}
+

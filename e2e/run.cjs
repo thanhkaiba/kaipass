@@ -243,6 +243,9 @@ async function localFlow(browser) {
   check('link không thu hồi được: cảnh báo rõ và bật sẵn mật khẩu chia sẻ',
     (await page.getByTestId('inline-warning').textContent()).includes('Ai có link vẫn') &&
     (await page.getByRole('switch', { name: 'Đặt mật khẩu chia sẻ' }).getAttribute('aria-checked')) === 'true');
+  await page.getByRole('button', { name: 'Tạo mật khẩu chia sẻ' }).click();
+  const madePass = await page.getByRole('textbox', { name: 'Mật khẩu chia sẻ' }).inputValue();
+  check('ô mật khẩu chia sẻ: nút tạo sẵn mật khẩu', /^[A-Za-z0-9]{14}$/.test(madePass) && (await page.getByRole('button', { name: 'Tạo link' }).isEnabled()), madePass);
   await page.getByRole('button', { name: 'Đóng' }).click();
   const shareLink = await makeShare('GitHub', { expiry: '1 giờ' });
   check('tạo link chia sẻ dạng tự chứa', shareLink.startsWith(URL_) && shareLink.includes('#share=l.'), shareLink.slice(0, 60));

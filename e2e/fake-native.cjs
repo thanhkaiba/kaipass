@@ -11,6 +11,8 @@ function fakeNative() {
     copies: [],
     files: [],
     pendingSave: null,
+    /** Several logins waiting, as the app's list holds them; `pendingSave` is a one-off. */
+    pendingQueue: [],
     saveDone: [],
   };
   n.handle = (method, args) => {
@@ -50,10 +52,11 @@ function fakeNative() {
         n.autofill = true;
         return true;
       case 'pendingSave':
-        return n.pendingSave;
+        return n.pendingQueue[0] ?? n.pendingSave;
       case 'saveDone':
         n.saveDone.push(args);
         n.pendingSave = null;
+        n.pendingQueue = n.pendingQueue.filter((p) => p.id !== args.id);
         return true;
       default:
         throw new Error(`Không hỗ trợ: ${method}`);

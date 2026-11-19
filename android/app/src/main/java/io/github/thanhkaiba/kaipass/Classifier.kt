@@ -15,7 +15,13 @@ data class FieldInfo(
 enum class Kind { USERNAME, PASSWORD, OTP, OTHER, SKIP }
 
 /** Indices into the field list, in screen order. */
-data class Form(val username: List<Int>, val password: List<Int>, val otp: List<Int>) {
+data class Form(
+    val username: List<Int>,
+    val password: List<Int>,
+    val otp: List<Int>,
+    /** The password fields that set a new password (sign-up, change): where a generated one goes. */
+    val newPassword: List<Int> = emptyList(),
+) {
     val isEmpty: Boolean get() = username.isEmpty() && password.isEmpty() && otp.isEmpty()
     val all: List<Int> get() = (username + password + otp).distinct()
 }
@@ -91,6 +97,34 @@ object Classifier {
             val before = (password.first() - 1 downTo 0).firstOrNull { kinds[it] == Kind.OTHER }
             if (before != null) username += before
         }
-        return Form(username, password, otp)
+        return Form(username, password, otp, newPasswordAmong(fields, password))
+    }
+
+    private val NEW_WORDS = Regex("new|mới|moi\\b|create|choose")
+    private val CONFIRM_WORDS = Regex("confirm|repeat|retype|again|verify|re.?enter|nhập.?lại|nhap.?lai|xác.?nhận|xac.?nhan|pass(word)?.?2")
+    private val CURRENT_WORDS = Regex("current|old|existing|hiện.?tại|hien.?tai")
+
+    /** Which of the password fields are for a new password rather than one the user already has. */
+    fun newPasswordAmong(fields: List<FieldInfo>, password: List<Int>): List<Int> {
+        fun last(i: Int) = fields[i].autocomplete?.lowercase()?.split(' ')?.lastOrNull()
+        fun saysNew(i: Int) = last(i) == "new-password" || fields[i].hints.any { it.lowercase().contains("newpassword") }
+        fun isNew(i: Int) = saysNew(i) || NEW_WORDS.containsMatchIn(words(fields[i]))
+        fun isCurrent(i: Int) = !saysNew(i) && (last(i) == "current-password" || CURRENT_WORDS.containsMatchIn(words(fields[i])))
+        fun isConfirm(i: Int) = CONFIRM_WORDS.containsMatchIn(words(fields[i]))
+        return when (password.size) {
+            0 -> emptyList()
+            1 -> if (!isCurrent(password[0]) && isNew(password[0])) password else emptyList()
+            2 -> {
+                val (a, b) = password
+                when {
+                    isCurrent(a) -> listOf(b)
+                    isConfirm(b) || isNew(a) -> password // password + confirmation
+                    isNew(b) -> listOf(b) // current + new
+                    else -> password
+                }
+            }
+            // Usually: current, new, confirmation.
+            else -> if (password.any(::isCurrent) || !isNew(password[0])) password.filterIndexed { n, i -> !isCurrent(i) && (n > 0 || isNew(i)) } else password
+        }
     }
 }

@@ -50,6 +50,14 @@
             android:taskAffinity=""
             android:theme="@style/Theme.KaiPass.Invisible" />
 
+        <!-- Invisible: makes a strong password for a sign-up form and queues it to be saved. -->
+        <activity
+            android:name=".GenerateActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.KaiPass.Invisible" />
+
         <!-- "Search KaiPass": pick any login for a page or app nothing matched. -->
         <activity
             android:name=".PickActivity"

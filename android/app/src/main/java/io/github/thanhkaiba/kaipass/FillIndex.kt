@@ -76,11 +76,3 @@ object Learned {
         prefs(c).edit().putStringSet(t.key, get(c, t) + id).apply()
     }
 }
-
-/** A login the user typed into an app or page, waiting for the web app to save it. */
-data class PendingSave(val target: Target, val appLabel: String, val username: String, val password: String, val at: Long)
-
-object Pending {
-    @Volatile var save: PendingSave? = null
-        get() = field?.takeIf { SystemClock.elapsedRealtime() - it.at < 10 * 60_000 }
-}

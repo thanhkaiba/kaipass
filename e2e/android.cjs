@@ -164,7 +164,7 @@ async function run(browser) {
   n.bioFails = false;
 
   // ---- logins typed elsewhere, handed over to save ----
-  n.pendingSave = { domain: 'github.com', package: 'com.android.chrome', appLabel: 'Chrome', username: 'user@example.com', password: 'new-gh-pass' };
+  n.pendingSave = { id: 'p1', domain: 'github.com', package: 'com.android.chrome', appLabel: 'Chrome', username: 'user@example.com', password: 'new-gh-pass' };
   await page.evaluate(() => window.__emit('pendingSave'));
   await page.getByRole('dialog', { name: 'Cập nhật mật khẩu?' }).waitFor();
   check('Android: nhận ra đăng nhập đã có cùng tài khoản → hỏi cập nhật', (await page.getByRole('dialog').textContent()).includes('GitHub'));
@@ -174,7 +174,7 @@ async function run(browser) {
   await until(page, () => n.index?.entries?.find((e) => e.title === 'GitHub')?.password === 'new-gh-pass', 'mật khẩu mới trong danh sách');
   check('Android: cập nhật mật khẩu, báo app xong', n.saveDone[0].saved === true);
 
-  n.pendingSave = { domain: null, package: 'vn.com.vng.zalo', appLabel: 'Zalo', username: '0901234567', password: 'zalo-pw' };
+  n.pendingSave = { id: 'p2', domain: null, package: 'vn.com.vng.zalo', appLabel: 'Zalo', username: '0901234567', password: 'zalo-pw' };
   await page.evaluate(() => window.__emit('pendingSave'));
   await page.getByRole('dialog', { name: 'Lưu đăng nhập?' }).waitFor();
   await shot('save-new');
@@ -183,11 +183,33 @@ async function run(browser) {
   const zalo = n.index.entries.find((e) => e.apps.includes('vn.com.vng.zalo'));
   check('Android: lưu đăng nhập mới từ app, gắn với app đó', zalo.title === 'Zalo' && zalo.username === '0901234567' && zalo.password === 'zalo-pw');
 
-  n.pendingSave = { domain: 'example.com', package: 'org.mozilla.firefox', appLabel: 'Firefox', username: 'a', password: 'b' };
+  n.pendingSave = { id: 'p3', domain: 'example.com', package: 'org.mozilla.firefox', appLabel: 'Firefox', username: 'a', password: 'b' };
   await page.evaluate(() => window.__emit('pendingSave'));
   await page.getByRole('button', { name: 'Không lưu' }).click();
   await until(page, () => n.saveDone.length === 3, 'saveDone');
   check('Android: không lưu thì báo app và không tạo mục', n.saveDone[2].saved === false && !n.index.entries.some((e) => e.title === 'example.com'));
+
+  // ---- passwords KaiPass generated on sign-up forms wait in a list until saved ----
+  n.pendingQueue = [
+    { id: 'g1', generated: true, domain: 'shop.example', package: 'com.android.chrome', appLabel: 'Chrome', username: 'dave@example.com', password: 'Gen-AAAA-1111-xyz!' },
+    { id: 'g2', generated: true, domain: null, package: 'com.bank.app', appLabel: 'Ngân hàng', username: '', password: 'Gen-BBBB-2222-xyz!' },
+  ];
+  await page.evaluate(() => window.__emit('resume'));
+  await page.getByRole('dialog', { name: 'Lưu đăng nhập?' }).waitFor();
+  check('Android: mở app thì hỏi lưu mật khẩu KaiPass đã tạo', (await page.getByRole('dialog').textContent()).includes('KaiPass đã tạo mật khẩu này') && (await page.getByLabel('Tên đăng nhập').inputValue()) === 'dave@example.com');
+  await shot('save-generated');
+  await page.getByRole('button', { name: 'Lưu', exact: true }).click();
+  await until(page, () => n.saveDone.some((d) => d.id === 'g1' && d.saved), 'lưu mật khẩu đã tạo');
+  await page.getByText('App Ngân hàng').waitFor();
+  check('Android: lưu xong thì hỏi tiếp mật khẩu đang chờ kế tiếp', (await page.getByRole('dialog').textContent()).includes('Ngân hàng'));
+  await page.getByLabel('Tên đăng nhập').fill('0909000111');
+  await page.getByRole('button', { name: 'Lưu', exact: true }).click();
+  await until(page, () => n.pendingQueue.length === 0, 'hết danh sách chờ');
+  await until(page, () => n.index?.entries?.some((e) => e.password === 'Gen-BBBB-2222-xyz!'), 'mật khẩu đã tạo trong vault');
+  const made = n.index.entries.filter((e) => e.password.startsWith('Gen-'));
+  check('Android: mật khẩu đã tạo vào vault, gắn đúng trang và app', made.length === 2 && made.some((e) => e.hosts.includes('shop.example') && e.username === 'dave@example.com') && made.some((e) => e.apps.includes('com.bank.app') && e.username === '0909000111'));
+  await page.waitForTimeout(400);
+  check('Android: hết danh sách chờ thì không hỏi nữa', (await page.getByRole('dialog').count()) === 0);
 
   // ---- files are saved through the app ----
   await openSettings(page);

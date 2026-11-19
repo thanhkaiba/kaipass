@@ -26,6 +26,8 @@ class FormIds(
     val password: ArrayList<AutofillId>,
     val otp: ArrayList<AutofillId>,
     val target: Target,
+    /** The fields for a new password (and its confirmation); empty on a sign-in form. */
+    val newPassword: ArrayList<AutofillId> = arrayListOf(),
 ) {
     val all: List<AutofillId> get() = (username + password + otp).distinct()
 
@@ -33,19 +35,21 @@ class FormIds(
         .putParcelableArrayListExtra("username", username)
         .putParcelableArrayListExtra("password", password)
         .putParcelableArrayListExtra("otp", otp)
+        .putParcelableArrayListExtra("newPassword", newPassword)
         .putExtra("domain", target.domain)
         .putExtra("package", target.packageName)
 
     companion object {
         fun of(p: Parsed) = FormIds(
             ArrayList(p.idsOf(p.form.username)), ArrayList(p.idsOf(p.form.password)), ArrayList(p.idsOf(p.form.otp)), p.target,
+            ArrayList(p.idsOf(p.form.newPassword)),
         )
 
         @Suppress("DEPRECATION")
         fun from(i: Intent): FormIds? {
             val pkg = i.getStringExtra("package") ?: return null
             fun list(k: String) = i.getParcelableArrayListExtra<AutofillId>(k) ?: arrayListOf()
-            return FormIds(list("username"), list("password"), list("otp"), Target(i.getStringExtra("domain"), pkg))
+            return FormIds(list("username"), list("password"), list("otp"), Target(i.getStringExtra("domain"), pkg), list("newPassword"))
         }
     }
 }
@@ -132,6 +136,35 @@ object Responses {
         return b.build()
     }
 
+    /**
+     * "Create a strong password", offered where a new password is asked for. The password is made
+     * when the suggestion is tapped (GenerateActivity), which also queues it to be saved: Android
+     * itself never offers to save a value that autofill put there.
+     */
+    @Suppress("DEPRECATION")
+    private fun generate(c: Context, form: FormIds, spec: InlinePresentationSpec?): Dataset {
+        val title = c.getString(R.string.generate_password)
+        val b = Dataset.Builder(remote(c, title, c.getString(R.string.generate_password_sub)))
+        inline(c, spec, title, "")?.let { b.setInlinePresentation(it) }
+        for (id in form.newPassword) b.setValue(id, null)
+        b.setAuthentication(sender(c, GenerateActivity::class.java, form))
+        return b.build()
+    }
+
+    /** "Unlock KaiPass" as one suggestion among others (the locked answer when a generator is offered too). */
+    @Suppress("DEPRECATION")
+    private fun unlock(c: Context, form: FormIds, specs: List<InlinePresentationSpec>, maxInline: Int, position: Int): Dataset {
+        val title = c.getString(R.string.unlock_to_fill)
+        val b = Dataset.Builder(remote(c, title, form.target.label))
+        inline(c, specAt(specs, position), title, "")?.let { b.setInlinePresentation(it) }
+        for (id in form.all) b.setValue(id, null)
+        b.setAuthentication(sender(c, AutofillActivity::class.java, form) { i ->
+            if (specs.isNotEmpty()) i.putParcelableArrayListExtra("specs", ArrayList(specs))
+            i.putExtra("maxInline", maxInline)
+        })
+        return b.build()
+    }
+
     fun saveInfo(form: FormIds): SaveInfo? {
         if (form.password.isEmpty()) return null
         val type = SaveInfo.SAVE_DATA_TYPE_PASSWORD or (if (form.username.isNotEmpty()) SaveInfo.SAVE_DATA_TYPE_USERNAME else 0)
@@ -151,7 +184,12 @@ object Responses {
     fun forRequest(c: Context, form: FormIds, specs: List<InlinePresentationSpec>, maxInline: Int): FillResponse {
         val entries = FillIndex.current()
         val r = FillResponse.Builder()
-        if (entries == null) {
+        val wantsNew = form.newPassword.isNotEmpty()
+        if (entries == null && wantsNew) {
+            // Locked, on a sign-up form: generating needs no vault, so offer it next to "unlock".
+            r.addDataset(generate(c, form, specAt(specs, 0)))
+            r.addDataset(unlock(c, form, specs, maxInline, position = 1))
+        } else if (entries == null) {
             val title = c.getString(R.string.unlock_to_fill)
             val sender = sender(c, AutofillActivity::class.java, form) { i ->
                 if (specs.isNotEmpty()) i.putParcelableArrayListExtra("specs", ArrayList(specs))
@@ -166,9 +204,12 @@ object Responses {
             }
         } else {
             val matches = usable(Matcher.matches(entries, form.target, Learned.get(c, form.target)), form)
-            val room = if (maxInline > 0) maxOf(maxInline - 1, 0) else 6
-            matches.take(room).forEachIndexed { i, e -> r.addDataset(lazy(c, e, form, specAt(specs, i))) }
-            r.addDataset(search(c, form, specAt(specs, minOf(matches.size, room))))
+            // On a sign-up form the generator comes first; saved logins for the site follow.
+            val first = if (wantsNew) 1 else 0
+            if (wantsNew) r.addDataset(generate(c, form, specAt(specs, 0)))
+            val room = (if (maxInline > 0) maxOf(maxInline - 1, 0) else 6) - first
+            matches.take(maxOf(room, 0)).forEachIndexed { i, e -> r.addDataset(lazy(c, e, form, specAt(specs, i + first))) }
+            r.addDataset(search(c, form, specAt(specs, minOf(matches.size, maxOf(room, 0)) + first)))
         }
         saveInfo(form)?.let { r.setSaveInfo(it) }
         return r.build()
@@ -182,6 +223,10 @@ object Responses {
         val room = if (maxInline > 0) maxOf(maxInline - 1, 0) else 6
         val r = FillResponse.Builder()
         var n = 0
+        if (form.newPassword.isNotEmpty()) {
+            r.addDataset(generate(c, form, specAt(specs, 0)))
+            n++
+        }
         for (e in matches) {
             if (n >= room) break
             filled(c, e, form, specAt(specs, n))?.let { r.addDataset(it); n++ }

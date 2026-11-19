@@ -93,6 +93,9 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
 - **Trong ô đăng nhập:** bấm vào ô tên đăng nhập, mật khẩu hoặc mã OTP. Biểu tượng KaiPass hiện ở
   mép phải ô, kèm danh sách tài khoản đã lưu cho trang đó; chọn một tài khoản là điền. Bấm biểu
   tượng (hoặc phím mũi tên xuống) để mở lại danh sách.
+- **Tạo mật khẩu ở ô mật khẩu mới:** trên form đăng ký hoặc đổi mật khẩu, bấm vào ô mật khẩu là
+  KaiPass gợi ý một mật khẩu mạnh 20 ký tự (bấm ↻ để đổi). Chọn **Dùng mật khẩu mạnh này** thì
+  KaiPass điền vào ô mật khẩu và ô nhập lại, rồi hỏi lưu ngay. Ô mật khẩu cũ được giữ nguyên.
 - **Hỏi lưu:** khi bạn đăng nhập bằng tài khoản chưa có trong KaiPass, hoặc đổi mật khẩu, một thẻ
   ở góc trên hỏi **Lưu** / **Cập nhật**. Với form đăng nhập hai bước (nhập email trước, mật khẩu
   sau), KaiPass nhớ tên đăng nhập ở bước đầu. Chọn **Không bao giờ cho trang này** để tắt hỏi ở một
@@ -163,6 +166,10 @@ của Android, mở khoá bằng vân tay/khuôn mặt/mã PIN, và đăng nhậ
 - Đăng nhập bằng tài khoản mới hoặc đổi mật khẩu: Android hỏi "Lưu vào KaiPass?". KaiPass mở lên,
   hỏi lưu mới hay cập nhật mục cũ, xong thì quay về app đang dùng.
 - Mở link chia sẻ KaiPass: trong Zalo/Messenger bấm Chia sẻ → KaiPass.
+
+- Ô cần **mật khẩu mới** (đăng ký, đổi mật khẩu): chọn **Tạo mật khẩu mạnh**. KaiPass điền mật khẩu
+  20 ký tự vào ô mật khẩu và ô nhập lại, rồi giữ nó trong danh sách chờ (đã mã hoá trên máy). Lần tới
+  mở KaiPass, app hỏi lưu vào vault.
 
 ### Cần biết
 

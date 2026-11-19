@@ -12,5 +12,8 @@
     <string name="bio_title">Mở khoá KaiPass</string>
     <string name="bio_enroll_title">Bật mở khoá bằng vân tay</string>
     <string name="bio_cancel">Huỷ</string>
+    <string name="generate_password">Tạo mật khẩu mạnh</string>
+    <string name="generate_password_sub">KaiPass tạo và lưu giúp bạn</string>
+    <string name="generated_toast">KaiPass đã điền mật khẩu mới. Mở KaiPass để lưu vào vault.</string>
     <string name="save_later">Mở KaiPass để lưu đăng nhập này</string>
 </resources>
