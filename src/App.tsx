@@ -26,6 +26,9 @@ type Phase =
   | { k: 'open'; session: Session };
 
 if (isPopup) document.documentElement.classList.add('popup');
+// Windows the extension opens itself (to unlock by fingerprint, or from a page's "open KaiPass")
+// carry the tab they act on; unlike the toolbar popup they have a size of their own to fill.
+if (isPopup && /[?&](tab|bio)\b/.test(location.search)) document.documentElement.classList.add('popup-window');
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>({ k: 'loading' });

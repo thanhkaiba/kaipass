@@ -66,6 +66,10 @@ const PAGES = {
   '/signup': `<form><input name="search" placeholder="Search"></form><form><input name="username"><input name="new" type="password" autocomplete="new-password"><input name="confirm" type="password" autocomplete="new-password"></form>`,
   '/register': `<h1>Create your account</h1><form method="post" action="/welcome"><input name="fullname" placeholder="Full name"><input name="email" type="email" placeholder="Email"><input name="password" type="password" placeholder="Password"><input name="password_confirm" type="password" placeholder="Confirm password"><button type="submit">Create account</button></form>`,
   '/change': `<form method="post" action="/welcome"><input name="current" type="password" autocomplete="current-password"><input name="newpw" type="password" placeholder="New password"><input name="again" type="password" placeholder="Repeat"><button type="submit">Save</button></form>`,
+  '/flow-user': `<h1>Sign in</h1><form method="post" action="/flow-pass"><input name="identifier" autocomplete="username" placeholder="Email"><button type="submit">Next</button></form>`,
+  '/flow-pass': `<form method="post" action="/flow-otp"><input name="password" type="password" autocomplete="current-password"><button type="button" aria-label="Show password">eye</button><button type="submit">Sign in</button></form>`,
+  '/flow-otp': `<h1>Two-step verification</h1><form method="post" action="/flow-done"><input name="code" autocomplete="one-time-code" inputmode="numeric"><button type="submit">Verify</button></form>`,
+  '/flow-done': `<h1>Signed in</h1>`,
   '/user-first': `<form><input name="identifier" type="text" autocomplete="username"><button>Next</button></form>`,
   '/otp': `<form><input name="code" autocomplete="one-time-code" inputmode="numeric"></form>`,
   '/digits': `<form>${'<input class="d" maxlength="1" inputmode="numeric">'.repeat(6)}</form>`,
@@ -80,11 +84,19 @@ const PAGES = {
   '/frame': `<p>Trang chứa khung của site khác</p><iframe src="http://127.0.0.1:${PORT}/login" width="400" height="200"></iframe>`,
 };
 
+/** What forms on the test site were sent with: { path, form }. */
+const posts = [];
+
 (async () => {
   PAGES['/qr'] = `<h1>Bật xác thực hai bước</h1><img alt="qr" src="${await QRCode.toDataURL('otpauth://totp/Local%20site:alice%40example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Local%20site', { width: 260, margin: 4 })}">`;
   const server = http
-    .createServer((req, res) => {
+    .createServer(async (req, res) => {
       const body = PAGES[req.url.split('?')[0]];
+      if (req.method === 'POST') {
+        let sent = '';
+        for await (const chunk of req) sent += chunk;
+        posts.push({ path: req.url, form: Object.fromEntries(new URLSearchParams(sent)) });
+      }
       res.writeHead(body ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(`<!doctype html><meta charset="utf-8"><title>test</title>${body ?? 'not found'}`);
     })
@@ -237,10 +249,20 @@ const PAGES = {
     check('site khác không được gợi ý đăng nhập này', (await ext.getByTestId('suggestions').textContent()).includes('Chưa có đăng nhập'));
 
     // ---- in-page suggestions (content script) ----
+    // These checks read what was filled, so the form must stay put: auto sign-in has its own section below.
+    const setAutoSubmit = (on) => ext.evaluate((v) => chrome.storage.local.set({ 'kaipass.inline': { icon: true, toast: true, autoSubmit: v } }), on);
+    await setAutoSubmit(false);
     const ui = site.locator('kaipass-ui');
     await site.goto(`http://localhost:${PORT}/login`);
     await ui.locator('.toast').waitFor({ state: 'visible', timeout: 10000 });
-    check('trang đăng nhập hiện thẻ gợi ý ở góc trên', (await ui.locator('.toast').textContent()).includes('Local site'));
+    const card = await ui.locator('.toast').boundingBox();
+    check('thẻ gợi ý hiện phía trên, né sang góc khi sẽ che ô nhập của trang', (await ui.locator('.toast').textContent()).includes('Local site') && card.y < 30 && card.x + card.width > 880, JSON.stringify(card));
+    await site.goto(`http://localhost:${PORT}/low`);
+    await ui.locator('.toast').waitFor({ state: 'visible', timeout: 10000 });
+    const centred = await ui.locator('.toast').boundingBox();
+    check('trang có form ở dưới: thẻ gợi ý nằm giữa phía trên', Math.abs(centred.x + centred.width / 2 - 450) < 3 && centred.y < 30, JSON.stringify(centred));
+    await site.goto(`http://localhost:${PORT}/login`);
+    await ui.locator('.toast').waitFor({ state: 'visible', timeout: 10000 });
     if (shots) await site.screenshot({ path: join(shots, 'inline-toast.png') });
     await ui.locator('.toast .row').first().click();
     await site.waitForFunction(() => document.querySelector('[name=pass]').value !== '');
@@ -315,6 +337,12 @@ const PAGES = {
       await site.waitForURL(/\/welcome$/);
     };
     const ip = `http://127.0.0.1:${PORT}`;
+    /** Picks bob from the suggestion card on the one-page sign-in form and waits for the result page. */
+    const signInByCard = async () => {
+      await site.goto(`${ip}/signin`);
+      await ui.locator('.toast .row', { hasText: 'bob' }).first().click();
+      await site.waitForURL(/\/welcome$/, { timeout: 15000 });
+    };
 
     await signIn(ip, 'bob', 'pw-bob-1');
     await saveCard.waitFor({ state: 'visible', timeout: 10000 });
@@ -377,6 +405,44 @@ const PAGES = {
     await site.locator('[name=password]').click();
     await ui.locator('.panel .row').first().waitFor({ state: 'visible', timeout: 10000 });
     check('ô mật khẩu đăng nhập thường: hiện tài khoản đã lưu, không gợi ý tạo mới', (await ui.locator('.panel .gen').count()) === 0);
+
+    // ---- pick a login once: KaiPass signs in and carries on through password and OTP ----
+    await setAutoSubmit(true);
+    posts.length = 0;
+    await site.goto(`http://localhost:${PORT}/flow-user`);
+    await ui.locator('.toast .row').first().waitFor({ state: 'visible', timeout: 10000 });
+    await ui.locator('.toast .row', { hasText: 'Local site' }).click();
+    await site.waitForURL(/\/flow-done$/, { timeout: 15000 });
+    const sent = Object.fromEntries(posts.map((p) => [p.path, p.form]));
+    check('chọn gợi ý: tự điền tên đăng nhập và bấm Next', sent['/flow-pass']?.identifier === 'alice@example.com', JSON.stringify(posts));
+    check('bước mật khẩu: tự điền và bấm Sign in (không bấm nhầm nút hiện mật khẩu)', sent['/flow-otp']?.password === 's3cret-pw');
+    check('bước OTP: tự điền mã hiện tại và xác nhận', codes().includes(sent['/flow-done']?.code), sent['/flow-done']?.code);
+    check('cả ba bước chỉ gửi mỗi form một lần', posts.length === 3);
+
+    // A rejected password must not be sent again by itself: the site shows the password page again.
+    posts.length = 0;
+    await site.goto(`http://localhost:${PORT}/flow-pass`);
+    await ui.locator('.toast').waitFor({ state: 'visible', timeout: 10000 });
+    await site.waitForTimeout(1200);
+    check('trang hỏi lại mật khẩu: không tự gửi lần hai, chỉ hiện gợi ý', posts.length === 0 && (await site.locator('[name=password]').inputValue()) === '');
+
+    // One page with username and password: fill both and sign in.
+    posts.length = 0;
+    await signInByCard();
+    check('form có cả tên đăng nhập và mật khẩu: điền rồi tự đăng nhập', posts.length === 1 && posts[0].form.password === 'pw-bob-2' && posts[0].form.email === 'bob');
+
+    // The login used last comes first next time.
+    await site.goto(`${ip}/signin`);
+    await ui.locator('.toast .row').first().waitFor({ state: 'visible', timeout: 10000 });
+    const before = await ui.locator('.toast .row .user').allTextContents();
+    check('tài khoản vừa dùng được xếp lên đầu gợi ý', before[0] === 'bob' && before.length >= 2, before.join());
+    const other = before[1];
+    await ui.locator('.toast .row', { hasText: other }).click();
+    await site.waitForURL(/\/welcome$/, { timeout: 15000 });
+    await site.goto(`${ip}/signin`);
+    await ui.locator('.toast .row').first().waitFor({ state: 'visible', timeout: 10000 });
+    check('dùng tài khoản khác thì tài khoản đó lên đầu', (await ui.locator('.toast .row .user').first().textContent()) === other, other);
+    await setAutoSubmit(false);
 
     await site.goto(`${ip}/username-step`);
     await site.locator('[name=identifier]').fill('carol');

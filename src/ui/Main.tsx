@@ -4,6 +4,7 @@ import { native } from '../lib/android';
 import { isAndroid, isExtension, isPopup } from '../lib/platform';
 import { AndroidSave } from './AndroidSave';
 import { autoLockMinutes } from '../lib/prefs';
+import { bumpUsage, lastTouched, readUsage, type Usage } from '../lib/usage';
 import type { Session, SyncStatus } from '../lib/session';
 import type { Item, ItemDraft, ItemType } from '../lib/vault';
 import { Avatar, Brand, copyText, errorText, Generator, Icon, IconButton, Modal, useNarrow, useToast } from './bits';
@@ -69,6 +70,10 @@ function subtitle(item: Item): string {
   if (item.url) return item.url.replace(/^https?:\/\//, '');
   return TYPE_LABEL[item.type];
 }
+
+type Order = 'name' | 'used' | 'recent';
+const ORDER_KEY = 'kaipass.order';
+const ORDER_LABEL: Record<Order, string> = { name: 'Tên A→Z', used: 'Hay dùng', recent: 'Mới sửa' };
 
 export function Main({
   session,
@@ -162,8 +167,26 @@ export function Main({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const folders = useMemo(() => vault.folders(), [vault, tick]);
 
+  // Which items are used on this device, for "most used" order and for putting the usual login first.
+  const [usage, setUsage] = useState<Usage>({});
+  useEffect(() => {
+    void readUsage().then(setUsage);
+  }, []);
+  const used = (id: string) => void bumpUsage(id).then(readUsage).then(setUsage);
+  const [order, setOrder] = useState<Order>(() => {
+    const saved = localStorage.getItem(ORDER_KEY) as Order | null;
+    return saved && saved in ORDER_LABEL ? saved : 'name';
+  });
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const byName = (a: Item, b: Item) => a.title.localeCompare(b.title, 'vi');
+    const compare =
+      order === 'used'
+        ? (a: Item, b: Item) => (usage[b.id]?.n ?? 0) - (usage[a.id]?.n ?? 0) || (usage[b.id]?.t ?? 0) - (usage[a.id]?.t ?? 0) || byName(a, b)
+        : order === 'recent'
+          ? (a: Item, b: Item) => b.modified - a.modified || byName(a, b)
+          : byName;
     return items
       .filter((i) => matches(i, filter))
       .filter(
@@ -174,8 +197,8 @@ export function Main({
             .toLowerCase()
             .includes(q),
       )
-      .sort((a, b) => a.title.localeCompare(b.title, 'vi'));
-  }, [items, filter, query]);
+      .sort(compare);
+  }, [items, filter, query, order, usage]);
 
   const current = selected ? items.find((i) => i.id === selected) : undefined;
   const count = (f: Filter) => items.filter((i) => matches(i, f)).length;
@@ -230,16 +253,18 @@ export function Main({
   const suggestions = useMemo(() => {
     if (!tab) return [];
     return items
-      .map((i) => ({ i, score: pageScore(i, tab.host) }))
+      .map((i) => ({ i, score: pageScore(i, tab.host), touched: lastTouched(usage, i.id, i.modified) }))
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score || a.i.title.localeCompare(b.i.title, 'vi'))
+      // Closest address first; among those, the login used (or added) most recently.
+      .sort((a, b) => b.score - a.score || b.touched - a.touched || a.i.title.localeCompare(b.i.title, 'vi'))
       .map((x) => x.i);
-  }, [items, tab]);
+  }, [items, tab, usage]);
 
   const fill = async (item: Item) => {
     if (!tab) return;
     try {
       const r = await fillTab(tab, item);
+      if (r.username || r.password || r.otp) used(item.id);
       if (!r.username && !r.password && !r.otp) {
         toast('Không tìm thấy ô đăng nhập trên trang này');
       } else if (r.code && !r.otp) {
@@ -295,6 +320,7 @@ export function Main({
   };
 
   const open = (i: Item) => {
+    used(i.id);
     setSelected(i.id);
     setDraft(null);
     setPane('detail');
@@ -459,6 +485,23 @@ export function Main({
           <h2>{heading}</h2>
           <span className="count">{visible.length}</span>
           <span className="grow" />
+          <select
+            className="order"
+            aria-label="Sắp xếp"
+            data-tip="Sắp xếp danh sách"
+            value={order}
+            onChange={(e) => {
+              const next = e.target.value as Order;
+              setOrder(next);
+              localStorage.setItem(ORDER_KEY, next);
+            }}
+          >
+            {(Object.keys(ORDER_LABEL) as Order[]).map((o) => (
+              <option key={o} value={o}>
+                {ORDER_LABEL[o]}
+              </option>
+            ))}
+          </select>
           {activeFolder && (
             <>
               <IconButton

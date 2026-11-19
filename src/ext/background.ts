@@ -9,6 +9,7 @@
 import * as brandData from '../icons/brands';
 import { brandFor, inkOn, resolveOverride } from '../lib/brandMatch';
 import { parseOtp, totp } from '../lib/totp';
+import { bumpUsage, lastTouched, readUsage } from '../lib/usage';
 import { backgroundSync, saveLogin } from './worker-vault';
 import {
   defaultInlinePrefs,
@@ -44,11 +45,12 @@ async function unlocked(): Promise<UnlockRecord | undefined> {
 
 async function entriesFor(host: string): Promise<FillEntry[]> {
   const all = ((await chrome.storage.session.get(FILL_INDEX_KEY))[FILL_INDEX_KEY] ?? []) as FillEntry[];
+  const usage = await readUsage();
   const scored = all
-    .map((e) => ({ e, score: Math.max(0, ...e.hosts.map((h) => matchScore(h, host))) }))
+    .map((e) => ({ e, score: Math.max(0, ...e.hosts.map((h) => matchScore(h, host))), touched: lastTouched(usage, e.id, e.modified) }))
     .filter((x) => x.score > 0);
-  // Closest address first, then by name.
-  scored.sort((a, b) => b.score - a.score || a.e.title.localeCompare(b.e.title));
+  // Closest address first; among those, the login used (or added) most recently; then by name.
+  scored.sort((a, b) => b.score - a.score || b.touched - a.touched || a.e.title.localeCompare(b.e.title));
   return scored.map((x) => x.e);
 }
 
@@ -85,6 +87,33 @@ function syncSoon(): Promise<void> {
 chrome.runtime.onInstalled.addListener(() => chrome.alarms.create('sync', { periodInMinutes: SYNC_EVERY_MIN }));
 chrome.runtime.onStartup.addListener(() => chrome.alarms.create('sync', { periodInMinutes: SYNC_EVERY_MIN }));
 chrome.alarms.onAlarm.addListener((a) => a.name === 'sync' && void syncSoon());
+
+// ---- carrying a sign-in through its steps ----
+
+/**
+ * After the user picks a login on a page, the same tab may show more steps: a password box after
+ * the username, then a code box. For a short while KaiPass fills those too, each kind once.
+ */
+interface Flow {
+  id: string;
+  until: number;
+  did: { password?: boolean; otp?: boolean };
+}
+const FLOW_KEY = 'kaipass.flow';
+const FLOW_FOR_MS = 2 * 60_000;
+
+async function activeFlow(tabId: number): Promise<Flow | undefined> {
+  const map = ((await chrome.storage.session.get(FLOW_KEY))[FLOW_KEY] ?? {}) as Record<string, Flow>;
+  const flow = map[tabId];
+  return flow && flow.until > Date.now() ? flow : undefined;
+}
+
+async function setFlow(tabId: number, flow: Flow): Promise<void> {
+  const map = ((await chrome.storage.session.get(FLOW_KEY))[FLOW_KEY] ?? {}) as Record<string, Flow>;
+  for (const [k, v] of Object.entries(map)) if (v.until <= Date.now()) delete map[k];
+  map[tabId] = flow;
+  await chrome.storage.session.set({ [FLOW_KEY]: map });
+}
 
 // ---- saving logins typed into pages ----
 
@@ -135,6 +164,7 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
     if (record && Date.now() - lastSync > STALE_MS) void syncSoon();
     const items = record && host ? await entriesFor(host) : [];
     const reply: StateReply = {
+      flow: !!record && !!(await activeFlow(tabId)),
       locked: !record,
       host,
       prefs: await prefs(),
@@ -152,9 +182,21 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
     return reply;
   }
 
-  if (req.type === 'fill') {
+  if (req.type === 'fill' || req.type === 'flow') {
     const record = await unlocked();
-    const entry = record && host ? (await entriesFor(host)).find((e) => e.id === req.id) : undefined;
+    let id: string | undefined;
+    if (req.type === 'fill') {
+      id = req.id;
+    } else {
+      // The next step of a sign-in the user started in this tab: each kind of step once, so a
+      // rejected password or code is never sent again on its own.
+      const flow = await activeFlow(tabId);
+      if (!flow || flow.did[req.want]) return { ok: false } satisfies FillReply;
+      await setFlow(tabId, { ...flow, did: { ...flow.did, [req.want]: true } });
+      id = flow.id;
+    }
+    // Only ever for a login saved for the site this frame is on.
+    const entry = record && host ? (await entriesFor(host)).find((e) => e.id === id) : undefined;
     if (!record || !entry) return { ok: false } satisfies FillReply;
     let otp = '';
     if (entry.otp) {
@@ -168,7 +210,18 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
     if (record.until !== null) {
       await chrome.storage.session.set({ [UNLOCK_KEY]: { ...record, until: Date.now() + record.minutes * 60_000 } });
     }
+    if (req.type === 'fill') {
+      void bumpUsage(entry.id);
+      // The user picked this login: remember it for the steps that follow (see 'flow').
+      if ((await prefs()).autoSubmit) await setFlow(tabId, { id: entry.id, until: Date.now() + FLOW_FOR_MS, did: {} });
+    }
     return { ok: true, username: entry.username, password: entry.password, otp } satisfies FillReply;
+  }
+
+  if (req.type === 'flowStep') {
+    const flow = await activeFlow(tabId);
+    if (flow) await setFlow(tabId, { ...flow, did: { password: flow.did.password || req.password, otp: flow.did.otp || req.otp } });
+    return undefined;
   }
 
   if (req.type === 'sawUsername') {

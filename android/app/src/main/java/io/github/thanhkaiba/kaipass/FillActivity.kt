@@ -21,6 +21,7 @@ class FillActivity : Activity() {
             return finish()
         }
         FillIndex.touch()
+        Usage.used(this, entry.id)
         val dataset = Responses.filled(this, entry, form)
         if (dataset == null) {
             setResult(RESULT_CANCELED)

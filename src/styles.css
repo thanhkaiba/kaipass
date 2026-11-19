@@ -1905,8 +1905,9 @@ button.link.file-name {
 
 /* ==== extension popup ==== */
 
-html.popup,
-html.popup body {
+/* The toolbar popup takes its size from the page; a window of our own is filled instead. */
+html.popup:not(.popup-window),
+html.popup:not(.popup-window) body {
   width: 400px;
   height: 600px;
 }
@@ -3061,4 +3062,23 @@ body {
 
 .client-setup strong {
   color: var(--text);
+}
+
+/* The list's sort order: a small, quiet picker next to the count. */
+.list-title select.order {
+  width: auto;
+  min-height: 28px;
+  padding: 2px 8px;
+  border-color: transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.list-title select.order:hover,
+.list-title select.order:focus {
+  border-color: var(--border);
+  background: var(--surface);
 }

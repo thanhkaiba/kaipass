@@ -67,6 +67,7 @@ class PickActivity : Activity() {
             val e = shown[i]
             val dataset = Responses.filled(this, e, form) ?: return@setOnItemClickListener
             if (remember.isChecked) Learned.add(this, form.target, e.id)
+            Usage.used(this, e.id)
             FillIndex.touch()
             FillActivity.copyOtpIfNeeded(this, e, form)
             setResult(RESULT_OK, Intent().putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset))

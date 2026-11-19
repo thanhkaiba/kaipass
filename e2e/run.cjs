@@ -715,6 +715,16 @@ async function localFlow(browser) {
   await page.getByRole('button', { name: 'Đóng' }).click();
   check('logo Claude: gỡ được', (await avatarOf('Ngân hàng của mẹ').getAttribute('data-brand')) === null);
 
+  // ---- list order ----
+  const firstTitle = () => page.locator('.item-title').first().textContent();
+  const alphabetical = await firstTitle();
+  await page.getByLabel('Sắp xếp').selectOption('recent');
+  check('sắp xếp "Mới sửa": mục vừa thêm lên đầu', (await firstTitle()) === 'Ví điện tử', await firstTitle());
+  await page.getByLabel('Sắp xếp').selectOption('used');
+  check('sắp xếp "Hay dùng": mục mở nhiều nhất lên đầu', (await firstTitle()) === 'GitHub', await firstTitle());
+  await page.getByLabel('Sắp xếp').selectOption('name');
+  check('sắp xếp theo tên như cũ', (await firstTitle()) === alphabetical);
+
   // Wiping for real, through the guarded path.
   await page.getByRole('button', { name: 'Khoá' }).click();
   await page.getByRole('button', { name: 'Quên master password?' }).click();

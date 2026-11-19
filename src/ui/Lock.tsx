@@ -7,6 +7,12 @@ import { Brand, errorText, Icon, SecretInput } from './bits';
 import { ForgotDialog } from './Forgot';
 
 const BIO_WINDOW = new URLSearchParams(location.search).has('bio');
+/**
+ * The window the extension opens for the fingerprint prompt asks once, when it opens. If the vault
+ * locks again later while that window is still around, it waits for a click instead of popping the
+ * system prompt up on its own.
+ */
+let askedOnOpen = false;
 /** Set when Android's autofill opened KaiPass to fill a login: the app or site it is for. */
 const AUTOFILL_FOR = isAndroid ? new URLSearchParams(location.search).get('autofill') : null;
 
@@ -84,7 +90,10 @@ export function Lock({
     void bioEnrolled().then((on) => {
       setBio(on);
       // The extension's own window and the Android app ask for the fingerprint straight away.
-      if (on && (BIO_WINDOW || isAndroid)) void useBio();
+      if (on && (isAndroid || (BIO_WINDOW && !askedOnOpen))) {
+        askedOnOpen = true;
+        void useBio();
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

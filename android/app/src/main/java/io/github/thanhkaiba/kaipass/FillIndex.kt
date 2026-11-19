@@ -66,6 +66,23 @@ object FillIndex {
     }
 }
 
+/** When each login was last filled on this phone, so the usual one is suggested first. Ids and times only. */
+object Usage {
+    private const val KEEP = 300
+    private fun prefs(c: Context) = c.getSharedPreferences("usage", Context.MODE_PRIVATE)
+
+    fun all(c: Context): Map<String, Long> = prefs(c).all.mapNotNull { (k, v) -> (v as? Long)?.let { k to it } }.toMap()
+
+    fun used(c: Context, id: String) {
+        val p = prefs(c)
+        val e = p.edit().putLong(id, System.currentTimeMillis())
+        // Forget the oldest once the list gets long (deleted logins never come back).
+        val all = all(c)
+        if (all.size > KEEP) all.entries.sortedBy { it.value }.take(all.size - KEEP).forEach { e.remove(it.key) }
+        e.apply()
+    }
+}
+
 /** Which login the user picked for an app or page nothing matched. Ids and names only, no secrets. */
 object Learned {
     private fun prefs(c: Context) = c.getSharedPreferences("learned", Context.MODE_PRIVATE)

@@ -14,7 +14,8 @@ bạn. Không có server, không có phí hằng tháng.
 - Đồng bộ qua Google Drive, tự gộp khi hai thiết bị cùng sửa. Mất mạng vẫn xem và sửa được.
 - Có app riêng cho macOS, Windows, Linux và Android (APK, tự điền mật khẩu và OTP vào mọi app
   và trình duyệt). iPhone cài bản web như một app (PWA).
-- Tạo mật khẩu, tìm kiếm, thư mục, nhãn, yêu thích, thùng rác, tự khoá.
+- Tạo mật khẩu, tìm kiếm, thư mục, nhãn, yêu thích, thùng rác, tự khoá. Danh sách sắp xếp theo
+  tên, theo mục hay dùng, hoặc theo mục mới sửa.
 - File `.kdbx` mở được bằng KeePassXC, KeePassium, KeePassDX… nên bạn không bị khoá vào app này.
 
 ## Giới hạn cần biết
@@ -100,11 +101,18 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
   ở góc trên hỏi **Lưu** / **Cập nhật**. Với form đăng nhập hai bước (nhập email trước, mật khẩu
   sau), KaiPass nhớ tên đăng nhập ở bước đầu. Chọn **Không bao giờ cho trang này** để tắt hỏi ở một
   trang. Chỉ hỏi khi KaiPass đang mở khoá.
-- **Thẻ gợi ý ở góc trên:** khi trang có ô đăng nhập và bạn đã lưu tài khoản cho trang đó, một thẻ
-  "Đăng nhập bằng KaiPass" hiện ở góc trên bên phải; bấm vào tài khoản để điền.
+- **Thẻ gợi ý phía trên:** khi trang có ô đăng nhập và bạn đã lưu tài khoản cho trang đó, một thẻ
+  "Đăng nhập bằng KaiPass" hiện ở giữa phía trên (tự né sang góc phải nếu sẽ che ô nhập hay nút của
+  trang). Tài khoản dùng gần nhất, hoặc mới thêm, đứng đầu.
+- **Tự đăng nhập:** chọn một tài khoản trong thẻ gợi ý hoặc trong danh sách ở ô đăng nhập là KaiPass
+  điền, bấm nút đăng nhập, rồi tự điền tiếp ở các bước sau trong cùng tab: mật khẩu (với trang hỏi
+  email trước) và mã OTP. Mỗi bước chỉ làm một lần trong hai phút, nên mật khẩu hay mã bị từ chối
+  không bao giờ bị gửi lại. Tắt ở Cài đặt → Gợi ý trên web → *Tự đăng nhập sau khi điền*.
 - **Từ thanh công cụ:** bấm biểu tượng KaiPass (hoặc `Ctrl+Shift+L`, trên Mac là `Cmd+Shift+L`),
   bấm **Điền** ở tài khoản muốn dùng.
-- Mã OTP được điền khi trang có ô nhập mã. Nếu ô đó ở bước sau, bấm vào ô và chọn tài khoản lần nữa.
+- Mã OTP được điền khi trang có ô nhập mã. Nếu ô đó ở bước sau, KaiPass tự điền tiếp khi bạn đã
+  chọn tài khoản từ gợi ý trên trang (xem *Tự đăng nhập*). Dùng nút **Điền** trong popup thì mã được
+  copy sẵn để dán.
 - Một tài khoản được gợi ý khi địa chỉ đã lưu cùng **site** với trang (ví dụ mọi trang
   `*.amazon.com`), xếp địa chỉ giống nhất lên trước. "Site" theo Public Suffix List, nên
   `ai-do.github.io` và `ke-xau.github.io` là hai site khác nhau, và không bao giờ gợi ý trên

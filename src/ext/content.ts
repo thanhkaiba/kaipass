@@ -135,6 +135,9 @@ declare const __KAIPASS_TEST__: boolean;
     box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
   .toast, .save { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
     background: #fff; color: #1b2030; border: 1px solid #d9dee8; box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
+  /* Sign-in suggestions sit at the top centre, where the eye already is; save prompts stay in the corner. */
+  .toast { right: auto; left: 50%; transform: translateX(-50%); width: 340px; max-width: calc(100vw - 24px); }
+  .toast.corner { left: auto; right: 12px; transform: none; }
   .head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; font-weight: 600; }
   .head .logo { width: 20px; height: 20px; border-radius: 5px; background: #2f6bff; flex: none; }
   .head .logo svg { width: 20px; height: 20px; display: block; }
@@ -293,13 +296,55 @@ declare const __KAIPASS_TEST__: boolean;
     clearInterval(ticker);
   }
 
+  const here = () => location.hostname.replace(/^www\./, '').toLowerCase();
+  const SUBMIT_WORDS = /log ?in|sign ?in|continue|next|submit|verify|confirm|dang nhap|tiep|xac nhan|gui/;
+  const labelOf = (b: HTMLElement) => fold(`${b.textContent ?? ''} ${(b as HTMLInputElement).value ?? ''} ${b.getAttribute('aria-label') ?? ''}`);
+  const pressable = (b: HTMLElement) => visible(b) && !(b as HTMLButtonElement).disabled && b.getAttribute('aria-disabled') !== 'true';
+
+  /** Presses the button that sends the form `input` is in, the way the user would. */
+  function submitFrom(input: HTMLInputElement) {
+    if (!input.isConnected) return;
+    const form = input.form;
+    if (form) {
+      const buttons = Array.from(form.querySelectorAll<HTMLElement>('button[type=submit], button:not([type]), input[type=submit]')).filter(pressable);
+      const button = buttons.find((b) => SUBMIT_WORDS.test(labelOf(b))) ?? (buttons.length === 1 ? buttons[0] : undefined);
+      if (button) button.click();
+      else if (buttons.length === 0 && typeof form.requestSubmit === 'function') form.requestSubmit();
+      else buttons[0]?.click();
+      return;
+    }
+    // No <form>: the closest box around the field that has a button reading like "sign in".
+    let box: HTMLElement | null = input.parentElement;
+    for (let depth = 0; box && depth < 5; depth++, box = box.parentElement) {
+      const button = Array.from(box.querySelectorAll<HTMLElement>('button, input[type=submit], input[type=button], [role=button]')).filter(pressable).find((b) => SUBMIT_WORDS.test(labelOf(b)));
+      if (button) return button.click();
+    }
+  }
+
+  /** After a fill: sign in for the user, unless the form still waits for something they must type. */
+  function submitSoon(done: { username: boolean; password: boolean; otp: boolean }, near: HTMLInputElement | null) {
+    if (!state?.prefs.autoSubmit || !(done.username || done.password || done.otp)) return;
+    setTimeout(() => {
+      const scope: ParentNode = near?.form ?? document;
+      const inputs = Array.from(scope.querySelectorAll('input')).filter((i) => visible(i) && !i.disabled);
+      // A password or code box left empty means there is nothing to send yet.
+      if (inputs.some((i) => !i.value && (roleOf(i) === 'password' || (done.otp && roleOf(i) === 'otp')))) return;
+      const anchor = (done.otp ? inputs.find((i) => roleOf(i) === 'otp') : undefined) ?? inputs.find((i) => roleOf(i) === 'password') ?? inputs.find((i) => roleOf(i) === 'username') ?? near;
+      if (anchor) submitFrom(anchor);
+    }, 350); // lets the page's own scripts notice the new values first
+  }
+
+  /** null until asked: whether a sign-in the user started is being carried through this tab. */
+  let flowOn: boolean | null = null;
+  const stepDone = { password: false, otp: false };
+
   async function fill(id: string) {
     const target = field;
     const reply = await ask<FillReply>({ type: 'fill', id });
     if (!reply?.ok) return;
     target?.focus();
-    fillPage({
-      host: location.hostname.replace(/^www\./, '').toLowerCase(),
+    const done = fillPage({
+      host: here(),
       username: reply.username ?? '',
       password: reply.password ?? '',
       otp: reply.otp ?? '',
@@ -307,6 +352,49 @@ declare const __KAIPASS_TEST__: boolean;
     });
     panel.style.display = 'none';
     toast.style.display = 'none';
+    if (state?.prefs.autoSubmit) {
+      flowOn = true;
+      stepDone.password ||= done.password;
+      stepDone.otp ||= done.otp;
+      void ask({ type: 'flowStep', ...done });
+      submitSoon(done, target);
+    }
+  }
+
+  /**
+   * The user picked a login a moment ago (here or on the page before) and the sign-in now shows
+   * its next step: fill the password, or the code, and carry on. Each step happens once.
+   */
+  let continuing = false;
+  async function maybeContinue(): Promise<boolean> {
+    if (continuing || flowOn === false) return false;
+    const empty = (role: FieldRole) => Array.from(document.querySelectorAll('input')).find((i) => roleOf(i) === role && !i.value) ?? null;
+    const otpBox = stepDone.otp ? null : empty('otp');
+    const pwBox = stepDone.password ? null : empty('password');
+    const want = otpBox ? 'otp' : pwBox ? 'password' : null;
+    if (!want) return false;
+    continuing = true;
+    try {
+      if (flowOn === null) flowOn = !!(await refresh())?.flow;
+      if (!flowOn) return false;
+      stepDone[want] = true;
+      const reply = await ask<FillReply>({ type: 'flow', want });
+      if (!reply?.ok) return false;
+      if (!state) await refresh();
+      const done = fillPage({
+        host: here(),
+        username: want === 'password' ? (reply.username ?? '') : '',
+        password: want === 'password' ? (reply.password ?? '') : '',
+        otp: reply.otp ?? '',
+      });
+      stepDone.otp ||= done.otp;
+      toastShown = true;
+      toast.style.display = 'none';
+      submitSoon(done, want === 'otp' ? otpBox : pwBox);
+      return done.password || done.otp;
+    } finally {
+      continuing = false;
+    }
   }
 
   const put = (input: HTMLInputElement, value: string) => {
@@ -423,6 +511,16 @@ declare const __KAIPASS_TEST__: boolean;
     }
     mount();
     toast.style.display = 'block';
+    // Top centre is where the eye is, but never on top of the page's own boxes and buttons:
+    // then the card moves to the corner.
+    toast.classList.remove('corner');
+    const card = toast.getBoundingClientRect();
+    const covers = Array.from(document.querySelectorAll<HTMLElement>('input, button, select, textarea, [role=button]')).some((n) => {
+      if (!visible(n)) return false;
+      const r = n.getBoundingClientRect();
+      return r.left < card.right && r.right > card.left && r.top < card.bottom && r.bottom > card.top;
+    });
+    toast.classList.toggle('corner', covers);
   }
 
   // ---- offering to save what the user typed ----
@@ -599,18 +697,23 @@ declare const __KAIPASS_TEST__: boolean;
   addEventListener('scroll', place, { capture: true, passive: true });
   addEventListener('resize', place, { passive: true });
 
+  /** Carry on a sign-in already under way; otherwise offer the saved logins. */
+  const onPageChange = async () => {
+    if (!(await maybeContinue())) await maybeToast();
+  };
+
   // Login forms often appear after the page loads (single-page apps, modals).
   let pending: ReturnType<typeof setTimeout> | undefined;
   new MutationObserver(() => {
     clearTimeout(pending);
-    pending = setTimeout(() => void maybeToast(), 400);
+    pending = setTimeout(() => void onPageChange(), 400);
   }).observe(document.documentElement, { childList: true, subtree: true });
   if (isTop) {
     void ask<SavePromptReply>({ type: 'pendingSave' }).then((reply) => {
       if (reply?.prompt) showSaveCard(reply);
-      else void maybeToast();
+      else void onPageChange();
     });
   } else {
-    void maybeToast();
+    void onPageChange();
   }
 })();

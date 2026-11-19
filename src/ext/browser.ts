@@ -118,7 +118,7 @@ export async function writeFillIndex(vault: Vault): Promise<void> {
     const urls = [i.url, ...i.fields.filter((f) => /^KP2A_URL/.test(f.name)).map((f) => f.value)];
     const hosts = [...new Set(urls.map(hostOf).filter(Boolean))];
     if (!hosts.length) continue;
-    entries.push({ id: i.id, title: i.title, username: i.username, password: i.password, otp: i.otp, hosts, logo: logos[i.id] });
+    entries.push({ id: i.id, title: i.title, username: i.username, password: i.password, otp: i.otp, hosts, modified: i.modified, logo: logos[i.id] });
   }
   await memory.set(FILL_INDEX_KEY, entries);
 }

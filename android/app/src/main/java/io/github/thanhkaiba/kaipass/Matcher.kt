@@ -72,9 +72,17 @@ object Matcher {
         return best
     }
 
-    fun matches(entries: List<Entry>, t: Target, learned: Set<String> = emptySet()): List<Entry> =
+    /**
+     * The logins for a place, best first: closest address, then the one used most recently on this
+     * phone (`lastUsed`: id → time), then by name.
+     */
+    fun matches(entries: List<Entry>, t: Target, learned: Set<String> = emptySet(), lastUsed: Map<String, Long> = emptyMap()): List<Entry> =
         entries.map { it to score(it, t, learned) }
             .filter { it.second > 0 }
-            .sortedWith(compareByDescending<Pair<Entry, Int>> { it.second }.thenBy { it.first.title.lowercase() })
+            .sortedWith(
+                compareByDescending<Pair<Entry, Int>> { it.second }
+                    .thenByDescending { lastUsed[it.first.id] ?: 0L }
+                    .thenBy { it.first.title.lowercase() },
+            )
             .map { it.first }
 }

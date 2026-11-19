@@ -68,6 +68,17 @@ class MatcherTest {
         assertTrue(Matcher.matches(all, Target(null, "com.example.notes")).isEmpty())
     }
 
+    @Test fun lastUsedComesFirstAmongEqualMatches() {
+        val work = entry("work", listOf("github.com"), listOf("github.com"), listOf("github"))
+        val home = entry("home", listOf("github.com"), listOf("github.com"), listOf("github"))
+        val t = Target("github.com", "com.android.chrome")
+        assertEquals(listOf("home", "work"), Matcher.matches(listOf(work, home), t).map { it.id })
+        assertEquals(listOf("work", "home"), Matcher.matches(listOf(work, home), t, lastUsed = mapOf("work" to 2000L, "home" to 1000L)).map { it.id })
+        // A closer address still beats a recently used login for the wider site.
+        val exact = entry("exact", listOf("gist.github.com"), listOf("github.com"), listOf("github"))
+        assertEquals("exact", Matcher.matches(listOf(work, exact), Target("gist.github.com", "x"), lastUsed = mapOf("work" to 9000L)).first().id)
+    }
+
     @Test fun rememberedPick() {
         assertEquals(listOf("aws"), Matcher.matches(all, Target(null, "com.example.console"), setOf("aws")).map { it.id })
     }

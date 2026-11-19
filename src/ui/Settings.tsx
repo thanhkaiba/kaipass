@@ -562,8 +562,15 @@ export function Settings({
                   <Setting icon="key" title="Biểu tượng trong ô đăng nhập" info="Hiện biểu tượng KaiPass và danh sách tài khoản khi bấm vào ô đăng nhập.">
                     <Switch label="Biểu tượng trong ô đăng nhập" checked={inline.icon} onChange={(v) => setInlinePref({ icon: v })} />
                   </Setting>
-                  <Setting icon="sparkle" title="Thẻ gợi ý góc trên" info="Hiện thẻ gợi ý tài khoản ở góc trên khi trang có ô đăng nhập.">
-                    <Switch label="Thẻ gợi ý góc trên" checked={inline.toast} onChange={(v) => setInlinePref({ toast: v })} />
+                  <Setting icon="sparkle" title="Thẻ gợi ý phía trên" info="Hiện thẻ gợi ý tài khoản ở giữa phía trên khi trang có ô đăng nhập.">
+                    <Switch label="Thẻ gợi ý phía trên" checked={inline.toast} onChange={(v) => setInlinePref({ toast: v })} />
+                  </Setting>
+                  <Setting
+                    icon="arrow"
+                    title="Tự đăng nhập sau khi điền"
+                    info="Chọn một tài khoản trong gợi ý là KaiPass điền, bấm nút đăng nhập, rồi tự điền tiếp mật khẩu và mã OTP ở các bước sau. Mỗi bước chỉ làm một lần."
+                  >
+                    <Switch label="Tự đăng nhập sau khi điền" checked={inline.autoSubmit} onChange={(v) => setInlinePref({ autoSubmit: v })} />
                   </Setting>
                   <Setting
                     icon="login"

@@ -203,7 +203,7 @@ object Responses {
                 r.setAuthentication(ids, sender, remote(c, title, form.target.label))
             }
         } else {
-            val matches = usable(Matcher.matches(entries, form.target, Learned.get(c, form.target)), form)
+            val matches = usable(Matcher.matches(entries, form.target, Learned.get(c, form.target), Usage.all(c)), form)
             // On a sign-up form the generator comes first; saved logins for the site follow.
             val first = if (wantsNew) 1 else 0
             if (wantsNew) r.addDataset(generate(c, form, specAt(specs, 0)))
@@ -219,7 +219,7 @@ object Responses {
     @Suppress("DEPRECATION")
     fun afterUnlock(c: Context, form: FormIds, specs: List<InlinePresentationSpec>, maxInline: Int): FillResponse {
         val entries = FillIndex.current().orEmpty()
-        val matches = usable(Matcher.matches(entries, form.target, Learned.get(c, form.target)), form)
+        val matches = usable(Matcher.matches(entries, form.target, Learned.get(c, form.target), Usage.all(c)), form)
         val room = if (maxInline > 0) maxOf(maxInline - 1, 0) else 6
         val r = FillResponse.Builder()
         var n = 0

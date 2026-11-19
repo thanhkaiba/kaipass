@@ -77,6 +77,8 @@ export interface FillEntry {
   password: string;
   otp: string;
   hosts: string[];
+  /** When the item was last edited, so new logins can be suggested first. */
+  modified?: number;
   /** A logo the user picked for this item (see LogoOverride in lib/brandMatch). */
   logo?: { b?: string; t?: string; h?: string; l?: string };
 }
@@ -84,11 +86,13 @@ export interface FillEntry {
 export interface InlinePrefs {
   /** KaiPass icon and suggestion list inside login fields. */
   icon: boolean;
-  /** Suggestion card in the top corner of login pages. */
+  /** Suggestion card at the top of login pages. */
   toast: boolean;
+  /** After filling from a suggestion: press the sign-in button, and carry on through the next steps (password, OTP). */
+  autoSubmit: boolean;
 }
 
-export const defaultInlinePrefs: InlinePrefs = { icon: true, toast: true };
+export const defaultInlinePrefs: InlinePrefs = { icon: true, toast: true, autoSubmit: true };
 
 // ---- messages between the content script and the background worker ----
 
@@ -106,6 +110,10 @@ export type SavePrompt = 'new' | 'update';
 export type Request =
   | { type: 'state' }
   | { type: 'fill'; id: string }
+  /** The page shows the next step of the sign-in the user started (a password or OTP box): credentials for it, once. */
+  | { type: 'flow'; want: 'password' | 'otp' }
+  /** What the user-started fill put on the page, so the same step is not repeated. */
+  | { type: 'flowStep'; username: boolean; password: boolean; otp: boolean }
   | { type: 'open' }
   | { type: 'sawUsername'; username: string }
   | { type: 'captured'; username: string; password: string }
@@ -130,6 +138,8 @@ export interface SavePromptReply {
 }
 
 export interface StateReply {
+  /** A sign-in the user started from a suggestion is still under way in this tab. */
+  flow: boolean;
   locked: boolean;
   host: string;
   items: SuggestItem[];
