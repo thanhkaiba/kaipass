@@ -70,6 +70,8 @@ const PAGES = {
   '/flow-pass': `<form method="post" action="/flow-otp"><input name="password" type="password" autocomplete="current-password"><button type="button" aria-label="Show password">eye</button><button type="submit">Sign in</button></form>`,
   '/flow-otp': `<h1>Two-step verification</h1><form method="post" action="/flow-done"><input name="code" autocomplete="one-time-code" inputmode="numeric"><button type="submit">Verify</button></form>`,
   '/flow-done': `<h1>Signed in</h1>`,
+  '/mail-otp': `<h1>Check your email</h1><p>We sent a 6-digit verification code to your email. Enter it below.</p><form method="post" action="/flow-done"><input name="code" autocomplete="one-time-code" inputmode="numeric"><button type="submit">Verify</button></form>`,
+  '/mflow-user': `<h1>Sign in</h1><form method="post" action="/mail-otp"><input name="identifier" autocomplete="username" placeholder="Email"><button type="submit">Next</button></form>`,
   '/user-first': `<form><input name="identifier" type="text" autocomplete="username"><button>Next</button></form>`,
   '/otp': `<form><input name="code" autocomplete="one-time-code" inputmode="numeric"></form>`,
   '/digits': `<form>${'<input class="d" maxlength="1" inputmode="numeric">'.repeat(6)}</form>`,
@@ -483,6 +485,120 @@ const posts = [];
     await site.goto(`${ip}/signin`);
     await ui.locator('.toast .row').first().waitFor({ state: 'visible', timeout: 10000 });
     check('dùng tài khoản khác thì tài khoản đó lên đầu', (await ui.locator('.toast .row .user').first().textContent()) === other, other);
+    // ---- a code the site emailed, read from a linked Gmail account (Gmail is faked) ----
+    const gmail = { calls: [], box: [], token: 'mail-token' };
+    const b64 = (t) => Buffer.from(t, 'utf8').toString('base64url');
+    await ctx.route('https://gmail.googleapis.com/**', (route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      gmail.calls.push(url.pathname + url.search);
+      const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+      if (req.headers().authorization !== `Bearer ${gmail.token}`) return json(401, { error: { message: 'invalid token' } });
+      if (url.pathname.endsWith('/profile')) return json(200, { emailAddress: 'Alice@example.com' });
+      if (url.pathname.endsWith('/messages')) {
+        const after = Number(/after:(\d+)/.exec(url.searchParams.get('q'))[1]) * 1000;
+        return json(200, { messages: gmail.box.filter((m) => m.at >= after).sort((a, b) => b.at - a.at).map((m) => ({ id: m.id })) });
+      }
+      const m = gmail.box.find((x) => url.pathname.endsWith(`/messages/${x.id}`));
+      if (!m) return json(404, {});
+      return json(200, { id: m.id, internalDate: String(m.at), snippet: '', payload: { mimeType: 'multipart/alternative', headers: [{ name: 'From', value: m.from }, { name: 'Subject', value: m.subject }], parts: [{ mimeType: 'text/html', body: { data: b64(m.html) } }] } });
+    });
+    const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'));
+    // Google's consent window cannot be driven from a test: the worker's call answers like Google would.
+    const stubGoogle = () =>
+      sw.evaluate(() => {
+        globalThis.__mailFlows ??= [];
+        chrome.identity.launchWebAuthFlow = async ({ url, interactive }) => {
+          const q = new URL(url).searchParams;
+          globalThis.__mailFlows.push({ interactive, scope: q.get('scope'), hint: q.get('login_hint'), prompt: q.get('prompt') });
+          return `${q.get('redirect_uri')}#access_token=mail-token&token_type=Bearer&expires_in=3600&state=${q.get('state')}`;
+        };
+      });
+    await stubGoogle();
+    await openPopup();
+    await ext.getByRole('navigation', { name: 'Điều hướng' }).getByRole('button', { name: 'Cài đặt' }).click();
+    await ext.getByRole('button', { name: 'Gợi ý trên web', exact: true }).click();
+    await ext.getByRole('button', { name: 'Liên kết', exact: true }).click();
+    await ext.getByText('alice@example.com').waitFor({ timeout: 10000 });
+    const linkFlow = (await sw.evaluate(() => globalThis.__mailFlows))[0];
+    check('liên kết Gmail: xin quyền chỉ đọc, cho chọn tài khoản', linkFlow.interactive === true && linkFlow.scope.endsWith('/auth/gmail.readonly') && linkFlow.prompt === 'select_account', JSON.stringify(linkFlow));
+    if (shots) await ext.screenshot({ path: join(shots, 'mail-link.png') });
+    await ext.getByRole('dialog', { name: 'Cài đặt' }).getByRole('button', { name: 'Đóng' }).click();
+
+    // The page says a code was emailed and the login saved for this site uses the linked address.
+    const mail = site.locator('kaipass-ui').locator('.mail');
+    gmail.calls.length = 0;
+    gmail.box = [{ id: 'old', at: Date.now() - 10 * 60_000, from: 'Local site <no-reply@localhost>', subject: 'Your code', html: '<p>Verification code: <b>111111</b></p>' }];
+    posts.length = 0;
+    await site.goto(`http://localhost:${PORT}/mail-otp`);
+    await mail.locator('.wait').waitFor({ state: 'visible', timeout: 10000 });
+    check('trang báo gửi mã qua email: KaiPass chờ thư, bỏ qua mã cũ từ 10 phút trước', (await mail.textContent()).includes('alice@example.com') && (await site.locator('[name=code]').inputValue()) === '');
+    gmail.box.push({ id: 'new', at: Date.now(), from: 'Local site <no-reply@localhost>', subject: 'Sign-in verification', html: '<html><body><p>Hi Alice,</p><p>Your verification code is</p><h2>640 915</h2><p>It expires in 10 minutes. © 2026</p></body></html>' });
+    await mail.locator('.code').waitFor({ state: 'visible', timeout: 15000 });
+    check('thư tới: hiện mã lấy từ email', (await mail.locator('.code').textContent()) === '640915', await mail.textContent());
+    if (shots) await site.screenshot({ path: join(shots, 'mail-code.png') });
+    await mail.locator('.row').click();
+    await site.waitForURL(/\/flow-done$/, { timeout: 15000 });
+    check('bấm vào mã: điền và xác nhận', posts.at(-1)?.form.code === '640915', JSON.stringify(posts));
+
+    // The same message is still in the mailbox: its code was used, so it is not offered again.
+    gmail.calls.length = 0;
+    await site.goto(`http://localhost:${PORT}/mail-otp`);
+    await mail.locator('.wait').waitFor({ state: 'visible', timeout: 10000 });
+    await site.waitForTimeout(3500);
+    check('mã đã dùng không được gợi ý lại', (await mail.locator('.code').count()) === 0 && gmail.calls.length > 0);
+
+    // Started from a suggestion with that address: the emailed code goes in by itself, and the
+    // authenticator code is not used for a box that wants the emailed one.
+    posts.length = 0;
+    gmail.box = [{ id: 'auto', at: Date.now(), from: 'Local site <no-reply@localhost>', subject: '482117 is your Local site code', html: '<p>Use 482117 to sign in.</p>' }];
+    await site.goto(`http://localhost:${PORT}/mflow-user`);
+    await ui.locator('.toast .row', { hasText: 'Local site' }).first().click();
+    await site.waitForURL(/\/flow-done$/, { timeout: 20000 });
+    check('đăng nhập từ gợi ý bằng email đã liên kết: tự điền mã từ email (không dùng nhầm mã ứng dụng)', posts.at(-1)?.form.code === '482117' && posts[0]?.form.identifier === 'alice@example.com', JSON.stringify(posts));
+
+    // Not that address, or not an emailed code: the mailbox is never opened.
+    gmail.calls.length = 0;
+    await site.goto(`${ip}/mail-otp`);
+    await site.waitForTimeout(2500);
+    check('trang khác, không đăng nhập bằng email đã liên kết: không đọc hộp thư', gmail.calls.length === 0 && !(await mail.isVisible()), gmail.calls.join());
+    await site.goto(`http://localhost:${PORT}/otp`);
+    await site.waitForTimeout(2000);
+    check('ô mã không nhắc tới email: không đọc hộp thư', gmail.calls.length === 0);
+
+    // Google signed out: the card asks to sign in again instead of failing quietly.
+    await stubGoogle();
+    gmail.token = 'mail-token-2';
+    gmail.box = [{ id: 're', at: Date.now(), from: 'Local site', subject: 'Code', html: 'Your verification code: 303808' }];
+    await sw.evaluate(() => {
+      const ok = chrome.identity.launchWebAuthFlow;
+      chrome.identity.launchWebAuthFlow = async (o) => {
+        if (!o.interactive) throw new Error('interaction required');
+        return (await ok(o)).replace('mail-token', 'mail-token-2');
+      };
+      return chrome.storage.session.remove('kaipass.mailTokens');
+    });
+    await site.goto(`http://localhost:${PORT}/mail-otp`);
+    await mail.getByRole('button', { name: 'Đăng nhập lại Gmail' }).waitFor({ state: 'visible', timeout: 10000 });
+    check('hết phiên Gmail: thẻ báo cần đăng nhập lại', true);
+    posts.length = 0;
+    await mail.getByRole('button', { name: 'Đăng nhập lại Gmail' }).click();
+    // Still the sign-in started from the suggestion a moment ago, so the code goes in by itself.
+    await site.waitForURL(/\/flow-done$/, { timeout: 15000 });
+    check('đăng nhập lại Gmail xong thì lấy được mã', posts.at(-1)?.form.code === '303808', JSON.stringify(posts));
+
+    // Unlinked: nothing is read any more.
+    await openPopup();
+    await ext.getByRole('navigation', { name: 'Điều hướng' }).getByRole('button', { name: 'Cài đặt' }).click();
+    await ext.getByRole('button', { name: 'Gợi ý trên web', exact: true }).click();
+    await ext.getByRole('button', { name: 'Bỏ liên kết alice@example.com' }).click();
+    await ext.getByText('Chưa liên kết').waitFor();
+    await ext.getByRole('dialog', { name: 'Cài đặt' }).getByRole('button', { name: 'Đóng' }).click();
+    gmail.calls.length = 0;
+    await site.goto(`http://localhost:${PORT}/mail-otp`);
+    await site.waitForTimeout(2000);
+    check('bỏ liên kết: không đọc hộp thư nữa, token cũng bị xoá', gmail.calls.length === 0 && (await ext.evaluate(async () => JSON.stringify(await chrome.storage.session.get('kaipass.mailTokens')))) === '{"kaipass.mailTokens":{}}');
+    await ctx.unroute('https://gmail.googleapis.com/**');
     await setAutoSubmit(false);
 
     await site.goto(`${ip}/username-step`);

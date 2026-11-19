@@ -27,6 +27,7 @@ import {
 import { WipeSection } from './Forgot';
 import { LookSettings } from './Look';
 import { AndroidAutofillSettings } from './AndroidSettings';
+import { MailLinkSettings } from './MailLink';
 import { DesktopClientSetup, needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
 export type Tab = 'security' | 'data' | 'web' | 'autofill' | 'ai' | 'look' | 'device';
@@ -594,6 +595,7 @@ export function Settings({
                   </Setting>
                 </div>
               )}
+              {tab === 'web' && <MailLinkSettings />}
 
               {tab === 'ai' && (
                 <AiSettings

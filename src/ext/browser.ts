@@ -79,8 +79,12 @@ export function openInTab(): void {
  * the browser's memory-only session storage until the auto-lock time passes or the browser quits.
  * Session storage is not readable by content scripts or web pages.
  */
+/** Set by forget(): a touch() already under way must not put the password back after a lock. */
+let lockedHere = false;
+
 export async function remember(password: string, minutes: number): Promise<void> {
   if (!isExtension) return;
+  lockedHere = false;
   const record: UnlockRecord = { password, until: minutes ? Date.now() + minutes * 60_000 : null, minutes };
   await memory.set(UNLOCK_KEY, record);
 }
@@ -98,6 +102,7 @@ export async function recall(): Promise<string | undefined> {
 
 export async function forget(): Promise<void> {
   if (!isExtension) return;
+  lockedHere = true;
   await memory.remove(UNLOCK_KEY);
   await memory.remove(FILL_INDEX_KEY);
   await memory.remove(VIEW_KEY);
@@ -145,8 +150,12 @@ export async function loadView(tabId: number | undefined): Promise<PopupView | u
 
 /** Pushes the auto-lock deadline back; call on user activity. */
 export async function touch(minutes: number): Promise<void> {
+  if (!isExtension || lockedHere) return;
   const password = await recall();
-  if (password) await remember(password, minutes);
+  // The user may have pressed "lock" while this was reading: then leave the vault locked.
+  if (!password || lockedHere) return;
+  await memory.set(UNLOCK_KEY, { password, until: minutes ? Date.now() + minutes * 60_000 : null, minutes } satisfies UnlockRecord);
+  if (lockedHere) await memory.remove(UNLOCK_KEY);
 }
 
 /** Publishes the logins the background worker may offer on web pages. */

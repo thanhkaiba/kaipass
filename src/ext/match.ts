@@ -114,6 +114,12 @@ export type Request =
   | { type: 'flow'; want: 'password' | 'otp' }
   /** What the user-started fill put on the page, so the same step is not repeated. */
   | { type: 'flowStep'; username: boolean; password: boolean; otp: boolean }
+  /** The page says it emailed a code: look in a linked mailbox for one that arrived after `since`. `seen` are addresses written on the page. */
+  | { type: 'mailOtp'; since: number; seen: string[] }
+  /** The user pressed "sign in to Gmail again" on the page's card. */
+  | { type: 'mailAuth'; email: string }
+  /** The code from this message went into the page: never offer it again. */
+  | { type: 'mailUsed'; id: string }
   | { type: 'open' }
   | { type: 'sawUsername'; username: string }
   | { type: 'captured'; username: string; password: string }
@@ -135,6 +141,20 @@ export interface SavePromptReply {
   prompt: SavePrompt | null;
   username?: string;
   host?: string;
+}
+
+/** Answer to 'mailOtp'. */
+export interface MailOtpReply {
+  /** none: no linked mailbox belongs to this sign-in. auth: Gmail needs signing in again. waiting: no code yet. */
+  status: 'none' | 'auth' | 'waiting' | 'found' | 'error';
+  email?: string;
+  /** The message the code came from. */
+  id?: string;
+  code?: string;
+  from?: string;
+  /** The user started this sign-in from a suggestion, so the code may be filled without asking. */
+  auto?: boolean;
+  error?: string;
 }
 
 export interface StateReply {
