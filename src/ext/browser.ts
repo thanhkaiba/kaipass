@@ -89,13 +89,30 @@ export async function remember(password: string, minutes: number): Promise<void>
   await memory.set(UNLOCK_KEY, record);
 }
 
+/**
+ * "Lock after N minutes" means N minutes without anyone using the computer, not N minutes since
+ * KaiPass itself was last clicked: someone working in the browser should not find it locked in
+ * the middle of a sign-in. So when the time is up, the browser is asked whether the user has been
+ * away that long; if not, the clock starts again.
+ */
+export async function stillInUse(record: UnlockRecord): Promise<boolean> {
+  try {
+    return (await chrome.idle.queryState(Math.max(15, record.minutes * 60))) === 'active';
+  } catch {
+    return false; // no idle information: lock, the safe side
+  }
+}
+
 export async function recall(): Promise<string | undefined> {
   if (!isExtension) return undefined;
   const saved = await memory.get<UnlockRecord>(UNLOCK_KEY);
   if (!saved) return undefined;
   if (saved.until !== null && saved.until < Date.now()) {
-    await forget();
-    return undefined;
+    if (lockedHere || !(await stillInUse(saved))) {
+      await forget();
+      return undefined;
+    }
+    await memory.set(UNLOCK_KEY, { ...saved, until: Date.now() + saved.minutes * 60_000 } satisfies UnlockRecord);
   }
   return saved.password;
 }

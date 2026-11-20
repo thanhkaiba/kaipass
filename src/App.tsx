@@ -30,11 +30,23 @@ if (isPopup) document.documentElement.classList.add('popup');
 // carry the tab they act on; unlike the toolbar popup they have a size of their own to fill.
 if (isPopup && /[?&](tab|bio)\b/.test(location.search)) document.documentElement.classList.add('popup-window');
 
+/** This window was opened only to unlock the vault for a page (see the background worker's 'open'). */
+const UNLOCK_ONLY = isPopup && new URLSearchParams(location.search).has('unlock');
+
 export default function App() {
   const [phase, setPhase] = useState<Phase>({ k: 'loading' });
 
   /** `password` is given when the user has just typed it, so the extension can stay unlocked. */
   const open = useCallback((session: Session, password?: string) => {
+    if (password && UNLOCK_ONLY) {
+      // Opened from a web page's "KaiPass is locked": unlock, hand the logins to the page, and get
+      // out of the way so the user is back on the form they were filling.
+      void remember(password, autoLockMinutes())
+        .then(() => writeFillIndex(session.vault))
+        .then(() => window.close());
+      setPhase({ k: 'open', session });
+      return;
+    }
     if (password) void remember(password, autoLockMinutes());
     setPhase({ k: 'open', session });
     void session.sync();

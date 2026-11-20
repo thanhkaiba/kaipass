@@ -51,7 +51,10 @@ export function Lock({
     // popup, so from there the prompt runs in a small window of its own.
     if (isPopup && !BIO_WINDOW) {
       await chrome.windows.create({
-        url: chrome.runtime.getURL(`index.html?popup&bio${forcedTabId !== undefined ? `&tab=${forcedTabId}` : await activeTabParam()}`),
+        // "&unlock" (this window exists only to unlock for a page) carries over to the fingerprint window.
+        url: chrome.runtime.getURL(
+          `index.html?popup&bio${new URLSearchParams(location.search).has('unlock') ? '&unlock' : ''}${forcedTabId !== undefined ? `&tab=${forcedTabId}` : await activeTabParam()}`,
+        ),
         type: 'popup',
         width: 420,
         height: 640,

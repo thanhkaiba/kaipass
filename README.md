@@ -125,35 +125,12 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
   không ẩn được nó. Danh sách KaiPass vì vậy mở phía trên ô nhập. Muốn Chrome thôi hiện, xoá các mật
   khẩu đó trong `chrome://password-manager` (Cài đặt → Gợi ý trên web có nút mở), và tắt "Chrome hỏi
   lưu mật khẩu" để chỉ KaiPass hỏi.
-- Khi KaiPass đang khoá, danh sách trong ô có nút **Mở khoá**.
+- Khi KaiPass đang khoá, danh sách trong ô có nút **Mở khoá**: một cửa sổ nhỏ hiện ra, mở khoá xong
+  nó tự đóng và trang hiện ngay các tài khoản, không cần tải lại.
+- **Tự khoá** trong extension tính theo việc máy tính có đang được dùng hay không: hết thời gian mà
+  bạn vẫn đang làm việc trên máy thì KaiPass không khoá giữa chừng; rời máy đủ lâu, hoặc máy khoá
+  màn hình, thì khoá.
 - Tắt biểu tượng hoặc thẻ gợi ý trong **Cài đặt → Gợi ý trên trang web**.
-
-### Mã gửi qua email (liên kết Gmail)
-
-Nhiều trang không dùng ứng dụng tạo mã mà gửi mã đăng nhập vào email. KaiPass có thể lấy mã đó giúp bạn:
-
-- **Khi nào KaiPass đọc thư:** chỉ khi cả ba điều sau cùng đúng: trang có ô nhập mã, trang có chữ báo
-  đã gửi mã qua email ("check your email", "đã gửi mã tới email"…), và bạn đang đăng nhập bằng đúng
-  địa chỉ đã liên kết (tài khoản bạn chọn từ gợi ý, tên bạn vừa gõ, tài khoản đã lưu cho trang đó,
-  hoặc địa chỉ trang hiện ra).
-- **KaiPass đọc gì:** vài thư mới nhất tới sau lúc trang hiện ra (lùi tối đa 90 giây). Nó tách lấy
-  mã rồi bỏ nội dung thư, không lưu gì. Token của Gmail chỉ nằm trong bộ nhớ của trình duyệt.
-- **Trên trang:** một thẻ "Mã từ email" hiện phía trên, chờ thư tới rồi hiện mã; bấm để điền. Nếu
-  bạn bắt đầu đăng nhập từ gợi ý của KaiPass bằng chính địa chỉ đó thì mã được điền và xác nhận
-  luôn. Mỗi mã chỉ được dùng một lần.
-- **Giới hạn:** hiện chỉ có Gmail, và chỉ trong extension. Google không có quyền "chỉ đọc thư có
-  mã": quyền cấp cho KaiPass là đọc cả hộp thư (chỉ đọc, không gửi, không xoá). Bỏ liên kết bất cứ
-  lúc nào trong Cài đặt, hoặc ở myaccount.google.com → Security → Third-party access.
-
-Bật một lần:
-
-1. Google Cloud Console (cùng project với Client ID): **APIs & Services → Library → Gmail API →
-   Enable**.
-2. **Google Auth Platform → Data Access → Add or remove scopes**, tích
-   `https://www.googleapis.com/auth/gmail.readonly`, Save. (Khi app còn ở chế độ Testing, địa chỉ
-   Gmail của bạn phải nằm trong Test users.)
-3. Trong extension: **Cài đặt → Gợi ý trên web → Mã từ email → Liên kết**, chọn tài khoản Gmail,
-   đồng ý. Có thể liên kết nhiều địa chỉ.
 
 ### Cần biết
 

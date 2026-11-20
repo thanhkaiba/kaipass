@@ -8,9 +8,8 @@
  * only acts on real (trusted) clicks and key presses.
  */
 import { defaultGen, generatePassword } from '../lib/generator';
-import { emailsIn, saysEmailCode } from '../lib/mailOtp';
 import { fillPage } from './fill';
-import type { FillReply, MailOtpReply, Request, SavePromptReply, StateReply, SuggestItem } from './match';
+import type { FillReply, Request, SavePromptReply, StateReply, SuggestItem } from './match';
 
 declare const __KAIPASS_TEST__: boolean;
 
@@ -134,15 +133,11 @@ declare const __KAIPASS_TEST__: boolean;
   .panel { position: fixed; display: none; min-width: 260px; max-width: 360px; max-height: 320px; overflow: auto;
     padding: 6px; border-radius: 10px; background: #fff; color: #1b2030; border: 1px solid #d9dee8;
     box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
-  .toast, .save, .mail { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
+  .toast, .save { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
     background: #fff; color: #1b2030; border: 1px solid #d9dee8; box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
   /* Sign-in suggestions sit at the top centre, where the eye already is; save prompts stay in the corner. */
-  .toast, .mail { right: auto; left: 50%; transform: translateX(-50%); width: 340px; max-width: calc(100vw - 24px); }
-  .toast.corner, .mail.corner { left: auto; right: 12px; transform: none; }
-  .mail .code { font: 600 20px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.08em; }
-  .mail .wait { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px; color: #5d667a; }
-  .mail .spin { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid #c9d2e3; border-top-color: #2f6bff; animation: kp-spin 0.8s linear infinite; }
-  @keyframes kp-spin { to { transform: rotate(360deg); } }
+  .toast { right: auto; left: 50%; transform: translateX(-50%); width: 340px; max-width: calc(100vw - 24px); }
+  .toast.corner { left: auto; right: 12px; transform: none; }
   .head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; font-weight: 600; }
   .head .logo { width: 20px; height: 20px; border-radius: 5px; background: #2f6bff; flex: none; }
   .head .logo svg { width: 20px; height: 20px; display: block; }
@@ -179,7 +174,7 @@ declare const __KAIPASS_TEST__: boolean;
   .ghost { padding: 7px 12px; border: 1px solid #d9dee8; border-radius: 8px; background: transparent; color: #1b2030; }
   .link { padding: 7px 4px; border: 0; background: transparent; color: #5d667a; font-size: 12px; }
   @media (prefers-color-scheme: dark) {
-    .panel, .toast, .save, .mail { background: #1b1f2a; color: #e8ebf2; border-color: #323a4c; }
+    .panel, .toast, .save { background: #1b1f2a; color: #e8ebf2; border-color: #323a4c; }
     .ghost { color: #e8ebf2 !important; border-color: #323a4c !important; }
     .who { background: #242a38 !important; }
     .row:hover, .row:focus-visible { background: #1f2d4a; }
@@ -194,13 +189,11 @@ declare const __KAIPASS_TEST__: boolean;
 <button class="badge" part="badge" title="KaiPass" aria-label="KaiPass"></button>
 <div class="panel" role="listbox" aria-label="KaiPass"></div>
 <div class="toast" role="dialog" aria-label="KaiPass"></div>
-<div class="save" role="dialog" aria-label="Lưu vào KaiPass"></div>
-<div class="mail" role="dialog" aria-label="Mã từ email"></div>`;
+<div class="save" role="dialog" aria-label="Lưu vào KaiPass"></div>`;
   const LOGO = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect x="116" y="126" width="280" height="260" rx="36" fill="none" stroke="#fff" stroke-width="34"/><circle cx="256" cy="256" r="58" fill="none" stroke="#fff" stroke-width="34"/></svg>`;
   const badge = root.querySelector<HTMLButtonElement>('.badge')!;
   const panel = root.querySelector<HTMLDivElement>('.panel')!;
   const toast = root.querySelector<HTMLDivElement>('.toast')!;
-  const mailCard = root.querySelector<HTMLDivElement>('.mail')!;
   const saveCard = root.querySelector<HTMLDivElement>('.save')!;
   badge.innerHTML = LOGO;
   let mounted = false;
@@ -341,6 +334,12 @@ declare const __KAIPASS_TEST__: boolean;
     }, 350); // lets the page's own scripts notice the new values first
   }
 
+  /** Whether the page says it sent the code somewhere (email, SMS) rather than asking for an authenticator app's. */
+  const codeWasSent = () => {
+    const t = fold((document.body?.innerText ?? '').slice(0, 8000)).replace(/\s+/g, ' ');
+    return /(sent|send|emailed|texted|gui|vua gui|da gui).{0,80}(e-?mail|inbox|hop thu|sms|text message|tin nhan|so dien thoai|phone)/.test(t) || /(check|kiem tra).{0,30}(e-?mail|inbox|hop thu|tin nhan)/.test(t);
+  };
+
   /** null until asked: whether a sign-in the user started is being carried through this tab. */
   let flowOn: boolean | null = null;
   const stepDone = { password: false, otp: false };
@@ -376,8 +375,8 @@ declare const __KAIPASS_TEST__: boolean;
   async function maybeContinue(): Promise<boolean> {
     if (continuing || flowOn === false) return false;
     const empty = (role: FieldRole) => Array.from(document.querySelectorAll('input')).find((i) => roleOf(i) === role && !i.value) ?? null;
-    // A code the site emailed is not the authenticator's: that one comes from the mailbox (below).
-    const otpBox = stepDone.otp || pageSaysEmailCode() ? null : empty('otp');
+    // A code the site sent by email or SMS is not the authenticator's: leave that box to the user.
+    const otpBox = stepDone.otp || codeWasSent() ? null : empty('otp');
     const pwBox = stepDone.password ? null : empty('password');
     const want = otpBox ? 'otp' : pwBox ? 'password' : null;
     if (!want) return false;
@@ -462,6 +461,12 @@ declare const __KAIPASS_TEST__: boolean;
       const b = el('button', 'action', 'Mở khoá');
       onTrusted(b, () => void ask({ type: 'open' }));
       panel.append(b);
+    } else if (role === 'otp' && items.length === 0 && s.items.length > 0) {
+      // Unlocked, and there is a login for this site: it just has no authenticator secret saved.
+      panel.append(el('div', 'note', `Tài khoản đã lưu cho ${s.host || 'trang này'} chưa có mã OTP trong KaiPass. Mã gửi qua SMS hoặc email thì nhập tay; mã từ ứng dụng xác thực thì thêm "Mã bí mật OTP" vào tài khoản đó.`));
+      const b = el('button', 'action', 'Mở KaiPass');
+      onTrusted(b, () => void ask({ type: 'open' }));
+      panel.append(b);
     } else if (items.length === 0) {
       panel.append(el('div', 'note', `Chưa có đăng nhập nào lưu cho ${s.host || 'trang này'}.`));
       const b = el('button', 'action', 'Mở KaiPass');
@@ -473,21 +478,6 @@ declare const __KAIPASS_TEST__: boolean;
     mount();
     panel.style.display = 'block';
     place();
-  }
-
-  /**
-   * Top centre is where the eye is, but never on top of the page's own boxes and buttons: a card
-   * that would cover one moves to the corner.
-   */
-  function dodge(card: HTMLElement) {
-    card.classList.remove('corner');
-    const c = card.getBoundingClientRect();
-    const covers = Array.from(document.querySelectorAll<HTMLElement>('input, button, select, textarea, [role=button]')).some((n) => {
-      if (!visible(n)) return false;
-      const r = n.getBoundingClientRect();
-      return r.left < c.right && r.right > c.left && r.top < c.bottom && r.bottom > c.top;
-    });
-    card.classList.toggle('corner', covers);
   }
 
   // ---- suggestion card (top frame only) ----
@@ -534,7 +524,16 @@ declare const __KAIPASS_TEST__: boolean;
     }
     mount();
     toast.style.display = 'block';
-    dodge(toast);
+    // Top centre is where the eye is, but never on top of the page's own boxes and buttons:
+    // then the card moves to the corner.
+    toast.classList.remove('corner');
+    const card = toast.getBoundingClientRect();
+    const covers = Array.from(document.querySelectorAll<HTMLElement>('input, button, select, textarea, [role=button]')).some((n) => {
+      if (!visible(n)) return false;
+      const r = n.getBoundingClientRect();
+      return r.left < card.right && r.right > card.left && r.top < card.bottom && r.bottom > card.top;
+    });
+    toast.classList.toggle('corner', covers);
   }
 
   // ---- offering to save what the user typed ----
@@ -711,115 +710,27 @@ declare const __KAIPASS_TEST__: boolean;
   addEventListener('scroll', place, { capture: true, passive: true });
   addEventListener('resize', place, { passive: true });
 
-  // ---- a code the site sent by email, read from a linked mailbox ----
-
-  const pageText = () => (document.body?.innerText ?? '').slice(0, 8000);
-  const pageSaysEmailCode = () => saysEmailCode(pageText());
-  const emptyOtpBox = () => Array.from(document.querySelectorAll('input')).find((i) => roleOf(i) === 'otp' && !i.value) ?? null;
-
-  function mailHead(sub: string) {
-    const head = el('div', 'head');
-    const logo = el('span', 'logo');
-    logo.innerHTML = LOGO;
-    const title = el('span', 'grow');
-    title.append(el('div', '', 'Mã từ email'), el('div', 'sub', sub));
-    const close = el('button', 'x', '×');
-    close.setAttribute('aria-label', 'Đóng');
-    onTrusted(close, () => {
-      mailStopped = true;
-      mailCard.style.display = 'none';
-    });
-    head.append(logo, title, close);
-    return head;
-  }
-
-  const showMail = (...nodes: Node[]) => {
-    mailCard.replaceChildren(...nodes);
-    toast.style.display = 'none';
-    toastShown = true;
-    mount();
-    mailCard.style.display = 'block';
-    dodge(mailCard);
-  };
-
-  function useMailCode(code: string, id: string | undefined, box: HTMLInputElement | null) {
-    const done = fillPage({ host: here(), username: '', password: '', otp: code });
-    if (id && done.otp) void ask({ type: 'mailUsed', id });
-    mailCard.style.display = 'none';
-    mailStopped = true;
-    submitSoon(done, box);
-  }
-
-  let mailRunning = false;
-  let mailStopped = false;
-  /**
-   * The page has a code box and says the code was emailed: ask the background worker, which looks
-   * in a linked mailbox only if this sign-in uses that address. Waits for the message to arrive.
-   */
-  async function maybeMailCode() {
-    if (mailRunning || mailStopped || !isTop) return;
-    if (!emptyOtpBox() || !pageSaysEmailCode()) return;
-    mailRunning = true;
-    // The message may have been sent a moment before this page appeared.
-    const since = Date.now() - 90_000;
-    const seen = emailsIn(pageText());
-    try {
-      for (let tries = 0; tries < 40 && !mailStopped; tries++) {
-        const box = emptyOtpBox();
-        if (!box) break; // the user typed it, or the page moved on
-        const reply = await ask<MailOtpReply>({ type: 'mailOtp', since, seen });
-        if (!reply || reply.status === 'none') break;
-        if (reply.status === 'found' && reply.code) {
-          if (!state) await refresh();
-          if (reply.auto && state?.prefs.autoSubmit) {
-            useMailCode(reply.code, reply.id, box);
-            break;
-          }
-          const row = el('button', 'row');
-          row.type = 'button';
-          const text = el('span', 'text');
-          text.append(el('span', 'code', reply.code), el('span', 'user', `${reply.from || 'Email'} · bấm để điền`));
-          row.append(text);
-          const { code, id } = reply;
-          onTrusted(row, () => useMailCode(code, id, emptyOtpBox()));
-          showMail(mailHead(reply.email ?? ''), row);
-          break;
-        }
-        if (reply.status === 'auth' && reply.email) {
-          const again = el('button', 'action', 'Đăng nhập lại Gmail');
-          const email = reply.email;
-          onTrusted(again, () => {
-            mailCard.style.display = 'none';
-            void ask({ type: 'mailAuth', email }).then(() => {
-              mailRunning = false;
-              mailStopped = false;
-              void maybeMailCode();
-            });
-          });
-          showMail(mailHead(reply.email), el('div', 'note', 'KaiPass cần bạn đăng nhập lại Gmail để đọc mã.'), again);
-          return; // waits for the click; mailRunning stays set
-        }
-        if (reply.status === 'error') {
-          showMail(mailHead(reply.email ?? ''), el('div', 'note', reply.error || 'Không đọc được hộp thư'));
-          break;
-        }
-        const wait = el('div', 'wait');
-        wait.append(el('span', 'spin'), el('span', '', 'Đang chờ thư có mã…'));
-        showMail(mailHead(reply.email ?? ''), wait);
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      if (mailCard.querySelector('.wait')) mailCard.style.display = 'none'; // gave up waiting
-    } finally {
-      if (!mailCard.querySelector('.action')) mailRunning = false;
-      mailStopped = true; // one look per page
-    }
-  }
-
   /** Carry on a sign-in already under way; otherwise offer the saved logins. */
   const onPageChange = async () => {
     if (!(await maybeContinue())) await maybeToast();
-    void maybeMailCode();
   };
+
+  /**
+   * The vault was unlocked (in KaiPass's own window) while this page was showing "locked": redraw
+   * what is on screen with the logins, instead of leaving the stale message until a reload.
+   */
+  async function onUnlocked() {
+    const wasLocked = !state || state.locked;
+    const s = await refresh();
+    if (!s || s.locked || !wasLocked) return;
+    if (field && field.isConnected && (panel.style.display === 'block' || document.activeElement === field)) await openPanel();
+    await onPageChange();
+  }
+  chrome.runtime.onMessage.addListener((msg: { type?: string }) => {
+    if (msg?.type === 'unlocked') void onUnlocked();
+  });
+  // Also when coming back to this window, in case the message was missed.
+  addEventListener('focus', () => state?.locked && void onUnlocked());
 
   // Login forms often appear after the page loads (single-page apps, modals).
   let pending: ReturnType<typeof setTimeout> | undefined;

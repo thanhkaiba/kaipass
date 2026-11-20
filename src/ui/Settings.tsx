@@ -27,7 +27,6 @@ import {
 import { WipeSection } from './Forgot';
 import { LookSettings } from './Look';
 import { AndroidAutofillSettings } from './AndroidSettings';
-import { MailLinkSettings } from './MailLink';
 import { DesktopClientSetup, needsClientId, RedirectHint, rememberClientId, savedClientId } from './Setup';
 
 export type Tab = 'security' | 'data' | 'web' | 'autofill' | 'ai' | 'look' | 'device';
@@ -427,7 +426,11 @@ export function Settings({
                       </div>
                     )}
 
-                    <Setting icon="clock" title="Tự khoá" info="Khoá vault khi không dùng trong khoảng thời gian này.">
+                    <Setting icon="clock" title="Tự khoá" info={
+                        isExtension
+                          ? 'Khoá vault khi máy tính không được dùng trong khoảng thời gian này, hoặc ngay khi máy khoá màn hình. Đang làm việc trên máy thì KaiPass không tự khoá giữa chừng.'
+                          : 'Khoá vault khi không dùng trong khoảng thời gian này.'
+                      }>
                       <select
                         id="autolock"
                         aria-label="Khoá sau khi không dùng"
@@ -595,7 +598,6 @@ export function Settings({
                   </Setting>
                 </div>
               )}
-              {tab === 'web' && <MailLinkSettings />}
 
               {tab === 'ai' && (
                 <AiSettings

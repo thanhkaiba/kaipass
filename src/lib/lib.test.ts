@@ -8,7 +8,6 @@ import { createRecord, normalizeKey, recoverPassword, withNewPassword, WrongReco
 import { matchScore } from '../ext/match';
 import * as brandData from '../icons/brands';
 import { brandFor, faviconUrls, inkOn, parseOverrides, resolveOverride } from './brandMatch';
-import { emailsIn, findCode, htmlToText, pickCode, sameMailbox, saysEmailCode } from './mailOtp';
 import { otpFromQrText } from './qr';
 import { buildKit, extractKey } from './recoveryKit';
 import { Vault, WrongPasswordError } from './vault';
@@ -461,63 +460,3 @@ describe('site logos', () => {
     expect(resolveOverride(brandData, undefined)).toBeNull();
   });
 });
-
-describe('codes sent by email', () => {
-  const code = (subject: string, body = '') => findCode(subject, body)?.code ?? null;
-
-  it('finds the code in common messages', () => {
-    expect(code('[GitHub] Please verify your device', 'Hey theo!\nA sign in attempt requires further verification.\nVerification code: 482913\nIf you did not attempt to sign in, change your password.')).toBe('482913');
-    expect(code('G-739201 is your Google verification code')).toBe('739201');
-    expect(code('Mã xác minh Shopee', 'Xin chào,\nMã xác minh của bạn là 204816. Mã có hiệu lực trong 15 phút. Không chia sẻ mã này.')).toBe('204816');
-    expect(code('Your login code', 'Use this code to sign in:\n\n531 907\n\nIt expires in 10 minutes.')).toBe('531907');
-    expect(code('Mã OTP đăng nhập', 'Mã OTP: 7741. Hiệu lực 5 phút.')).toBe('7741');
-    expect(code('Your one-time passcode is 90817263')).toBe('90817263');
-  });
-
-  it('passes over years, amounts, order numbers and links', () => {
-    expect(code('Your receipt', 'Order #4829135 placed on 12 November 2026. Total: 1250000 VND.')).toBeNull();
-    expect(code('Tin tức tuần này 2026', 'Xem thêm tại https://example.com/news/123456 hoặc gọi 19001234.')).toBeNull();
-    expect(code('Security alert', 'Your verification code is 665544.\n© 2026 Example Inc, 1600 Main Street. Unsubscribe: https://x.co/u/998877')).toBe('665544');
-    expect(code('Welcome to Linear')).toBeNull();
-  });
-
-  it('reads the code out of an HTML message', () => {
-    const html = '<html><head><style>.a{color:#123456}</style></head><body><p>Hi,</p><p>Your sign-in code is</p><div style="font-size:32px"><b>915&nbsp;204</b></div><p>&copy; 2026</p></body></html>';
-    expect(code('Sign in to Notion', htmlToText(html))).toBe('915204');
-  });
-
-  it('uses only fresh mail, and prefers the site being signed in to', () => {
-    const now = 1_800_000_000_000;
-    const mail = (id: string, from: string, subject: string, text: string, ago: number) => ({ id, from, subject, text, at: now - ago });
-    const box = [
-      mail('old', 'GitHub <noreply@github.com>', 'Your GitHub code', 'Verification code: 111111', 20 * 60_000),
-      mail('other', 'Shopee <no-reply@shopee.vn>', 'Mã xác minh', 'Mã xác minh của bạn là 222222', 20_000),
-      mail('mine', 'GitHub <noreply@github.com>', '[GitHub] Please verify your device', 'Verification code: 333333', 40_000),
-      mail('news', 'Medium <noreply@medium.com>', 'Top stories of 2026', 'Read more', 5_000),
-    ];
-    expect(pickCode(box, { since: now - 3 * 60_000, site: 'github' })?.code).toBe('333333');
-    expect(pickCode(box, { since: now - 3 * 60_000 })?.code).toBe('222222');
-    expect(pickCode(box, { since: now - 10_000 })).toBeNull();
-    // A code already filled in is not offered again.
-    expect(pickCode(box, { since: now - 3 * 60_000, site: 'github', used: ['mine'] })?.code).toBe('222222');
-  });
-
-  it('recognises pages that say a code was emailed', () => {
-    expect(saysEmailCode('We just sent a verification code to your email. Enter it below.')).toBe(true);
-    expect(saysEmailCode('Check your inbox for a 6-digit code')).toBe(true);
-    expect(saysEmailCode('Chúng tôi đã gửi mã xác minh tới email t***7@gmail.com')).toBe(true);
-    expect(saysEmailCode('Nhập mã gồm 6 chữ số trong hộp thư của bạn')).toBe(true);
-    expect(saysEmailCode('Open your authenticator app and enter the code')).toBe(false);
-    expect(saysEmailCode('Nhập mã từ ứng dụng xác thực')).toBe(false);
-    expect(saysEmailCode('Email address  Password  Sign in')).toBe(false);
-  });
-
-  it('matches mailboxes the way Gmail does', () => {
-    expect(sameMailbox('Theo.Nguyen+shop@gmail.com', 'theonguyen@googlemail.com')).toBe(true);
-    expect(sameMailbox('theo@gmail.com', 'theo2@gmail.com')).toBe(false);
-    expect(sameMailbox('a.b@company.vn', 'ab@company.vn')).toBe(false);
-    expect(sameMailbox('theo', 'theo')).toBe(false);
-    expect(emailsIn('Sent to Theo@Example.com and theo@example.com.')).toEqual(['theo@example.com']);
-  });
-});
-

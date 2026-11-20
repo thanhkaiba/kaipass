@@ -10,9 +10,7 @@ import * as brandData from '../icons/brands';
 import { brandFor, inkOn, resolveOverride } from '../lib/brandMatch';
 import { parseOtp, totp } from '../lib/totp';
 import { bumpUsage, lastTouched, readUsage } from '../lib/usage';
-import { getDomainWithoutSuffix } from 'tldts';
-import { pickCode, sameMailbox, type MailMessage } from '../lib/mailOtp';
-import { linkedMail, linkMail, MailAuthNeeded, recentMessages, unlinkMail } from './mail';
+import { stillInUse } from './browser';
 import { backgroundSync, saveLogin } from './worker-vault';
 import {
   defaultInlinePrefs,
@@ -27,7 +25,6 @@ import {
   type SavePromptReply,
   type FillEntry,
   type FillReply,
-  type MailOtpReply,
   type InlinePrefs,
   type Request,
   type StateReply,
@@ -41,11 +38,32 @@ async function unlocked(): Promise<UnlockRecord | undefined> {
   const record = (await chrome.storage.session.get(UNLOCK_KEY))[UNLOCK_KEY] as UnlockRecord | undefined;
   if (!record) return undefined;
   if (record.until !== null && record.until < Date.now()) {
-    await chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY]);
-    return undefined;
+    // Time is up only if the user has actually been away (see stillInUse).
+    if (!(await stillInUse(record))) {
+      await chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY]);
+      return undefined;
+    }
+    const renewed = { ...record, until: Date.now() + record.minutes * 60_000 };
+    await chrome.storage.session.set({ [UNLOCK_KEY]: renewed });
+    return renewed;
   }
   return record;
 }
+
+// The computer's own lock screen locks the vault too, at once.
+chrome.idle.onStateChanged.addListener((state) => {
+  if (state === 'locked') void chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY, 'kaipass.view']);
+});
+
+// Pages that showed "KaiPass is locked" are told the moment its logins become available again
+// (the list is published right after an unlock), so they can show the accounts without a reload.
+chrome.storage.session.onChanged.addListener((changes) => {
+  const index = changes[FILL_INDEX_KEY];
+  if (!index || index.oldValue !== undefined || index.newValue === undefined) return;
+  void chrome.tabs.query({}).then((tabs) => {
+    for (const t of tabs) if (t.id !== undefined) chrome.tabs.sendMessage(t.id, { type: 'unlocked' }).catch(() => {});
+  });
+});
 
 async function entriesFor(host: string): Promise<FillEntry[]> {
   const all = ((await chrome.storage.session.get(FILL_INDEX_KEY))[FILL_INDEX_KEY] ?? []) as FillEntry[];
@@ -117,40 +135,6 @@ async function setFlow(tabId: number, flow: Flow): Promise<void> {
   for (const [k, v] of Object.entries(map)) if (v.until <= Date.now()) delete map[k];
   map[tabId] = flow;
   await chrome.storage.session.set({ [FLOW_KEY]: map });
-}
-
-// ---- codes from a linked mailbox ----
-
-/** A code older than this is from an earlier attempt, not the one on screen. */
-const MAIL_LOOKBACK_MS = 5 * 60_000;
-/** Pages ask every few seconds while waiting; the mailbox is not asked more often than this. */
-const MAIL_EVERY_MS = 2500;
-/** Messages whose code was already filled in (a code works once), by id. Memory only. */
-const MAIL_USED_KEY = 'kaipass.mailUsed';
-const usedMail = async () => ((await chrome.storage.session.get(MAIL_USED_KEY))[MAIL_USED_KEY] ?? []) as string[];
-let lastMail: { email: string; since: number; at: number; messages: MailMessage[] } | undefined;
-
-async function freshMail(email: string, since: number): Promise<MailMessage[]> {
-  // Only the same page asking again (same `since`) gets the remembered answer: a new page must
-  // never be handed the code an earlier one already used.
-  if (lastMail && lastMail.email === email && lastMail.since === since && Date.now() - lastMail.at < MAIL_EVERY_MS) return lastMail.messages;
-  const messages = await recentMessages(email, since);
-  lastMail = { email, since, at: Date.now(), messages };
-  return messages;
-}
-
-/** Linking and unlinking a mailbox, asked for by KaiPass's own pages (Settings), never by a web page. */
-async function handleOwnPage(req: { type?: string; email?: string }): Promise<unknown> {
-  try {
-    if (req.type === 'mailLink') return { ok: true, linked: await linkMail() };
-    if (req.type === 'mailUnlink' && req.email) {
-      await unlinkMail(req.email);
-      return { ok: true };
-    }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  return undefined;
 }
 
 // ---- saving logins typed into pages ----
@@ -262,51 +246,6 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
     return undefined;
   }
 
-  if (req.type === 'mailOtp') {
-    const none = { status: 'none' } satisfies MailOtpReply;
-    const linked = await linkedMail();
-    if (!linked.length || !host || !(await unlocked())) return none;
-    // Whose sign-in is this? The login the user picked, what they typed, a login saved for this
-    // site, or an address the page itself shows. Only a linked mailbox among those is ever read.
-    const flow = await activeFlow(tabId);
-    const entries = await entriesFor(host);
-    const picked = flow ? entries.find((e) => e.id === flow.id) : undefined;
-    const pending = (await pendingMap())[tabId];
-    const typed = pending?.host === host ? [pending.lastUsername, pending.username] : [];
-    const names = [picked?.username, ...typed, ...req.seen.slice(0, 10), ...(picked ? [] : entries.map((e) => e.username))].filter((n): n is string => !!n);
-    const mailbox = linked.find((m) => names.some((n) => sameMailbox(n, m.email)));
-    if (!mailbox) return none;
-    const since = Math.max(req.since, Date.now() - MAIL_LOOKBACK_MS);
-    try {
-      const messages = await freshMail(mailbox.email, since);
-      const code = pickCode(messages, { since, site: getDomainWithoutSuffix(host, { allowPrivateDomains: true }) ?? undefined, used: await usedMail() });
-      if (!code) return { status: 'waiting', email: mailbox.email } satisfies MailOtpReply;
-      return {
-        status: 'found',
-        email: mailbox.email,
-        id: code.id,
-        code: code.code,
-        from: code.from.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '') || code.from,
-        // Filled without asking only when the user started this sign-in with that very address.
-        auto: !!picked && sameMailbox(picked.username, mailbox.email),
-      } satisfies MailOtpReply;
-    } catch (e) {
-      if (e instanceof MailAuthNeeded) return { status: 'auth', email: mailbox.email } satisfies MailOtpReply;
-      return { status: 'error', email: mailbox.email, error: e instanceof Error ? e.message : String(e) } satisfies MailOtpReply;
-    }
-  }
-
-  if (req.type === 'mailUsed') {
-    await chrome.storage.session.set({ [MAIL_USED_KEY]: [...(await usedMail()), req.id.slice(0, 64)].slice(-30) });
-    return undefined;
-  }
-
-  if (req.type === 'mailAuth') {
-    if (!(await linkedMail()).some((m) => m.email === req.email)) return { ok: false };
-    await linkMail(req.email);
-    return { ok: true };
-  }
-
   if (req.type === 'sawUsername') {
     if (!host || !req.username) return undefined;
     const prev = (await pendingMap())[tabId];
@@ -368,8 +307,10 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
   if (req.type === 'open') {
     // Opens KaiPass in a small window bound to the tab the user was on, so they can unlock and
     // pick a login there.
+    // Asked from "KaiPass is locked": the window is only there to unlock, and closes itself after.
+    const justUnlock = !(await unlocked());
     await chrome.windows.create({
-      url: chrome.runtime.getURL(`index.html?popup&tab=${sender.tab.id}`),
+      url: chrome.runtime.getURL(`index.html?popup&tab=${sender.tab.id}${justUnlock ? '&unlock' : ''}`),
       type: 'popup',
       width: 420,
       height: 640,
@@ -388,13 +329,6 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
 const inFlight = new Map<number, Promise<unknown>>();
 
 chrome.runtime.onMessage.addListener((req: Request, sender, reply) => {
-  const type = (req as { type?: string }).type;
-  if (type === 'mailLink' || type === 'mailUnlink') {
-    // Only from an extension page; a content script's sender address is the web page's.
-    if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(''))) return false;
-    handleOwnPage(req as { type?: string; email?: string }).then(reply, () => reply(undefined));
-    return true;
-  }
   const tabId = sender.tab?.id;
   let work: Promise<unknown>;
   if (req.type === 'pendingSave' && tabId !== undefined && inFlight.has(tabId)) {
