@@ -6,7 +6,8 @@
 import { Session, storedMeta } from '../lib/session';
 import type { ItemDraft } from '../lib/vault';
 import { cleanupExpiredShares } from '../lib/share';
-import { writeFillIndex } from './browser';
+import type { Passkey } from '../lib/passkey';
+import { matchesPage, writeFillIndex } from './browser';
 import { BUMP_KEY } from './match';
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -35,6 +36,38 @@ function withSession(password: string, work: (s: Session) => Promise<boolean>): 
     } finally {
       session.close();
     }
+  });
+}
+
+/**
+ * Keeps a new passkey: on the login already saved for that site and username when there is one
+ * without a passkey, otherwise on a new login.
+ */
+export async function savePasskey(password: string, p: { host: string; origin: string; rpName: string; passkey: Passkey }): Promise<void> {
+  await withSession(password, async (session) => {
+    const existing = session.vault
+      .items()
+      .find((i) => !i.trashed && i.type === 'login' && !i.passkey && matchesPage(i, p.host) && (!i.username || i.username.toLowerCase() === p.passkey.username.toLowerCase()));
+    const draft: ItemDraft = existing
+      ? { ...existing, username: existing.username || p.passkey.username, passkey: p.passkey }
+      : {
+          type: 'login',
+          title: p.rpName.trim() || p.host,
+          username: p.passkey.username,
+          password: '',
+          url: p.origin,
+          notes: '',
+          otp: '',
+          fields: [],
+          tags: [],
+          favorite: false,
+          folderId: '',
+          passkey: p.passkey,
+        };
+    session.vault.upsert(draft);
+    await session.commit();
+    await session.sync();
+    return true;
   });
 }
 

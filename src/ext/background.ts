@@ -11,7 +11,8 @@ import { brandFor, inkOn, resolveOverride } from '../lib/brandMatch';
 import { parseOtp, totp } from '../lib/totp';
 import { bumpUsage, lastTouched, readUsage } from '../lib/usage';
 import { stillInUse } from './browser';
-import { backgroundSync, saveLogin } from './worker-vault';
+import { createPasskey, rpIdAllowed, signWithPasskey } from '../lib/passkey';
+import { backgroundSync, saveLogin, savePasskey } from './worker-vault';
 import {
   defaultInlinePrefs,
   FILL_INDEX_KEY,
@@ -25,6 +26,11 @@ import {
   type SavePromptReply,
   type FillEntry,
   type FillReply,
+  type PasskeyEntry,
+  type PkListReply,
+  type PkReply,
+  PK_INDEX_KEY,
+  PK_SITES_KEY,
   type InlinePrefs,
   type Request,
   type StateReply,
@@ -40,7 +46,7 @@ async function unlocked(): Promise<UnlockRecord | undefined> {
   if (record.until !== null && record.until < Date.now()) {
     // Time is up only if the user has actually been away (see stillInUse).
     if (!(await stillInUse(record))) {
-      await chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY]);
+      await chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY, PK_INDEX_KEY]);
       return undefined;
     }
     const renewed = { ...record, until: Date.now() + record.minutes * 60_000 };
@@ -52,7 +58,7 @@ async function unlocked(): Promise<UnlockRecord | undefined> {
 
 // The computer's own lock screen locks the vault too, at once.
 chrome.idle.onStateChanged.addListener((state) => {
-  if (state === 'locked') void chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY, 'kaipass.view']);
+  if (state === 'locked') void chrome.storage.session.remove([UNLOCK_KEY, FILL_INDEX_KEY, PK_INDEX_KEY, 'kaipass.view']);
 });
 
 // Pages that showed "KaiPass is locked" are told the moment its logins become available again
@@ -244,6 +250,53 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
     const flow = await activeFlow(tabId);
     if (flow) await setFlow(tabId, { ...flow, did: { password: flow.did.password || req.password, otp: flow.did.otp || req.otp } });
     return undefined;
+  }
+
+  // ---- passkeys ----
+  if (req.type === 'pkList' || req.type === 'pkSign' || req.type === 'pkCreate') {
+    // Where the frame really is, from Chrome, never from the page.
+    const frame = new URL(sender.url ?? 'https://invalid/');
+    const rpId = (req.rpId || frame.hostname).toLowerCase();
+    const allowed = /^https?:$/.test(frame.protocol) && rpIdAllowed(rpId, frame.hostname);
+    const record = await unlocked();
+    const mine = async () => (((await chrome.storage.session.get(PK_INDEX_KEY))[PK_INDEX_KEY] ?? []) as PasskeyEntry[]).filter((p) => p.passkey.rpId === rpId);
+
+    if (req.type === 'pkList') {
+      if (!allowed) return { locked: !record, has: false, bad: true, items: [] } satisfies PkListReply;
+      if (!record) {
+        const sites = ((await chrome.storage.local.get(PK_SITES_KEY))[PK_SITES_KEY] ?? []) as string[];
+        return { locked: true, has: sites.includes(rpId), items: [] } satisfies PkListReply;
+      }
+      const usage = await readUsage();
+      const items = (await mine())
+        .filter((p) => req.allow.length === 0 || req.allow.includes(p.passkey.credentialId))
+        .sort((a, b) => lastTouched(usage, b.id) - lastTouched(usage, a.id) || a.title.localeCompare(b.title))
+        .map((p) => ({ id: p.id, title: p.title, username: p.username }));
+      return { locked: false, has: items.length > 0, items } satisfies PkListReply;
+    }
+
+    if (!allowed) return { ok: false, error: 'bad' } satisfies PkReply;
+    if (!record) return { ok: false, error: 'locked' } satisfies PkReply;
+
+    if (req.type === 'pkSign') {
+      const entry = (await mine()).find((p) => p.id === req.id);
+      if (!entry) return { ok: false, error: 'failed' } satisfies PkReply;
+      const a = await signWithPasskey(entry.passkey, { origin: frame.origin, challenge: req.challenge });
+      void bumpUsage(entry.id);
+      return { ok: true, result: { ...a, credentialId: entry.passkey.credentialId } } satisfies PkReply;
+    }
+
+    // A site lists the passkeys it already has for this user so that the same authenticator is
+    // not registered twice.
+    if ((await mine()).some((p) => req.exclude.includes(p.passkey.credentialId))) return { ok: false, error: 'exists' } satisfies PkReply;
+    try {
+      const made = await createPasskey({ rpId, origin: frame.origin, challenge: req.challenge, user: { id: req.user.id, name: (req.user.name || req.user.displayName).slice(0, 256) } });
+      // In the vault first: a passkey the site knows about but KaiPass lost would lock the user out.
+      await savePasskey(record.password, { host: hostOf(sender.url ?? ''), origin: frame.origin, rpName: req.rpName.slice(0, 120), passkey: made.passkey });
+      return { ok: true, result: { ...made.response, credentialId: made.passkey.credentialId } } satisfies PkReply;
+    } catch {
+      return { ok: false, error: 'failed' } satisfies PkReply;
+    }
   }
 
   if (req.type === 'sawUsername') {

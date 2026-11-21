@@ -162,6 +162,21 @@ export function ItemEditor({
               mono
               extra={<IconButton icon="qr" label="Quét mã QR" tip="Quét mã QR: trên trang, ảnh chụp màn hình, ảnh, camera" onClick={() => setScanning(true)} />}
             />
+            {d.passkey && (
+              <div className="undo-bar">
+                <Icon name="finger" />
+                <span className="grow">
+                  Passkey cho <strong>{d.passkey.rpId}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => window.confirm(`Xoá passkey của ${d.passkey!.rpId}? Bạn sẽ không đăng nhập trang đó bằng passkey này được nữa.`) && set({ passkey: undefined })}
+                >
+                  Xoá passkey
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>

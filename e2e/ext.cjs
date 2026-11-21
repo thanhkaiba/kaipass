@@ -9,6 +9,7 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 const { fakeDrive } = require('./fake-drive.cjs');
+const { relyingParty, PASSKEY_PAGE } = require('./webauthn-rp.cjs');
 const QRCode = require('qrcode');
 const kdbxweb = require('kdbxweb');
 const { argon2id, argon2d } = require('hash-wasm');
@@ -70,6 +71,7 @@ const PAGES = {
   '/flow-pass': `<form method="post" action="/flow-otp"><input name="password" type="password" autocomplete="current-password"><button type="button" aria-label="Show password">eye</button><button type="submit">Sign in</button></form>`,
   '/flow-otp': `<h1>Two-step verification</h1><form method="post" action="/flow-done"><input name="code" autocomplete="one-time-code" inputmode="numeric"><button type="submit">Verify</button></form>`,
   '/flow-done': `<h1>Signed in</h1>`,
+  '/passkey': PASSKEY_PAGE,
   '/user-first': `<form><input name="identifier" type="text" autocomplete="username"><button>Next</button></form>`,
   '/otp': `<form><input name="code" autocomplete="one-time-code" inputmode="numeric"></form>`,
   '/digits': `<form>${'<input class="d" maxlength="1" inputmode="numeric">'.repeat(6)}</form>`,
@@ -86,11 +88,14 @@ const PAGES = {
 
 /** What forms on the test site were sent with: { path, form }. */
 const posts = [];
+/** The test site's passkey side: checks every registration and sign-in with a WebAuthn library. */
+const rp = relyingParty({ origin: `http://localhost:${PORT}`, rpID: 'localhost' });
 
 (async () => {
   PAGES['/qr'] = `<h1>Bật xác thực hai bước</h1><img alt="qr" src="${await QRCode.toDataURL('otpauth://totp/Local%20site:alice%40example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Local%20site', { width: 260, margin: 4 })}">`;
   const server = http
     .createServer(async (req, res) => {
+      if (await rp.handle(req, res)) return;
       const body = PAGES[req.url.split('?')[0]];
       if (req.method === 'POST') {
         let sent = '';
@@ -446,6 +451,89 @@ const posts = [];
     await site.locator('[name=password]').click();
     await ui.locator('.panel .row').first().waitFor({ state: 'visible', timeout: 10000 });
     check('ô mật khẩu đăng nhập thường: hiện tài khoản đã lưu, không gợi ý tạo mới', (await ui.locator('.panel .gen').count()) === 0);
+
+    // ---- passkeys: the site's own WebAuthn calls, answered by KaiPass ----
+    const pk = ui.locator('.pk');
+    const outText = async (want) => {
+      await site.waitForFunction((w) => document.getElementById('out').textContent.includes(w), want, { timeout: 15000 }).catch(() => {});
+      return site.locator('#out').textContent();
+    };
+    const pkIndex = () => ext.evaluate(async () => (await chrome.storage.session.get('kaipass.pk'))['kaipass.pk'] ?? []);
+    await site.goto(`http://localhost:${PORT}/passkey`);
+    await site.locator('#create').click();
+    await pk.getByRole('button', { name: 'Lưu passkey' }).waitFor({ state: 'visible', timeout: 10000 });
+    check('trang đòi tạo passkey: KaiPass hỏi lưu, ghi rõ tài khoản', (await pk.textContent()).includes('Lưu passkey vào KaiPass?') && (await pk.textContent()).includes('alice@example.com'));
+    if (shots) await site.screenshot({ path: join(shots, 'passkey-save.png') });
+    await pk.getByRole('button', { name: 'Lưu passkey' }).click();
+    const reg = JSON.parse(await outText('registered'));
+    check('passkey KaiPass tạo được máy chủ WebAuthn thật chấp nhận', reg.registered === true && reg.userVerified === true && reg.backedUp === true, JSON.stringify(reg));
+    check('trang nhận đúng kiểu đối tượng của trình duyệt', reg.isPublicKeyCredential && reg.isAttestation && reg.json === 'string');
+    await waitIndex(() => true);
+    let kept = await pkIndex();
+    check('passkey nằm trong vault, gắn vào đăng nhập đã lưu của trang đó', kept.length === 1 && kept[0].title === 'Local site' && kept[0].passkey.rpId === 'localhost' && kept[0].passkey.privateKeyPem.includes('BEGIN PRIVATE KEY'), JSON.stringify(kept.map((k) => k.title)));
+
+    await site.locator('#signin').click();
+    await pk.locator('.row').first().waitFor({ state: 'visible', timeout: 10000 });
+    check('trang đòi đăng nhập bằng passkey: KaiPass đưa passkey ra', (await pk.textContent()).includes('Đăng nhập bằng passkey') && (await pk.textContent()).includes('alice@example.com'));
+    if (shots) await site.screenshot({ path: join(shots, 'passkey-signin.png') });
+    await pk.locator('.row').first().click();
+    const login = JSON.parse(await outText('signedIn'));
+    check('đăng nhập bằng passkey trong KaiPass: máy chủ xác nhận chữ ký', login.signedIn === true && login.user === 'user-1' && login.isAssertion, JSON.stringify(login));
+
+    await site.locator('#quiet').click();
+    await pk.locator('.row').first().waitFor({ state: 'visible', timeout: 10000 });
+    check('kiểu "passkey tự gợi ý": hiện gợi ý, không có nút chặn trang', (await pk.getByRole('button', { name: 'Dùng thiết bị khác' }).count()) === 0);
+    await pk.locator('.row').first().click();
+    check('chọn passkey từ gợi ý: đăng nhập được', JSON.parse(await outText('signedIn')).signedIn === true);
+
+    await site.locator('#create').click();
+    check('trang đã có passkey này: không tạo trùng, báo đúng lỗi chuẩn', (await outText('error')) === 'error: InvalidStateError' && (await pkIndex()).length === 1);
+
+    // Closing the card refuses the request, like cancelling the browser's own dialog.
+    await site.locator('#signin').click();
+    await pk.locator('.row').first().waitFor({ state: 'visible', timeout: 10000 });
+    await pk.getByRole('button', { name: 'Đóng' }).click();
+    check('đóng thẻ passkey: trang nhận lỗi "không được phép"', (await outText('error')) === 'error: NotAllowedError');
+
+    // The passkey shows on the item in KaiPass itself.
+    await openPopup();
+    await ext.locator('.item', { hasText: 'Local site' }).first().click();
+    check('mục trong KaiPass hiện passkey', (await ext.getByTestId('passkey-row').textContent()).includes('localhost'));
+    await ext.getByRole('button', { name: 'Quay lại danh sách' }).click();
+
+    // Locked: KaiPass knows the site has a passkey, asks to unlock, then carries on.
+    await ext.getByRole('button', { name: 'Khoá' }).first().click();
+    await ext.getByLabel('Master password').waitFor();
+    await site.reload();
+    await site.locator('#signin').click();
+    await pk.getByRole('button', { name: 'Mở khoá' }).waitFor({ state: 'visible', timeout: 10000 });
+    check('đang khoá mà trang đòi passkey: báo có passkey, cho mở khoá', (await pk.textContent()).includes('đang khoá'));
+    const [unlockWin] = await Promise.all([ctx.waitForEvent('page'), pk.getByRole('button', { name: 'Mở khoá' }).click()]);
+    await unlockWin.getByLabel('Master password').fill(PW);
+    await Promise.all([unlockWin.waitForEvent('close', { timeout: 15000 }), unlockWin.getByRole('button', { name: 'Mở khoá', exact: true }).click()]);
+    await pk.locator('.row').first().waitFor({ state: 'visible', timeout: 10000 });
+    await pk.locator('.row').first().click();
+    check('mở khoá xong: chọn passkey và đăng nhập được, không cần bấm lại trên trang', JSON.parse(await outText('signedIn')).signedIn === true);
+
+    // Turned off, or "another device": the browser's own passkey handling runs (a virtual
+    // authenticator stands in for the computer's).
+    const cdp = await ctx.newCDPSession(site);
+    await cdp.send('WebAuthn.enable');
+    await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+    rp.credentials.clear();
+    await site.locator('#create').click();
+    await pk.getByRole('button', { name: 'Dùng thiết bị khác' }).click();
+    const viaBrowser = JSON.parse(await outText('registered'));
+    check('"Dùng thiết bị khác": trình duyệt tự xử lý, KaiPass không lưu gì thêm', viaBrowser.registered === true && (await pkIndex()).length === 1, JSON.stringify(viaBrowser));
+    await ext.evaluate(() => chrome.storage.local.set({ 'kaipass.inline': { icon: true, toast: true, autoSubmit: false, passkeys: false } }));
+    await site.reload();
+    await site.locator('#signin').click();
+    const off = JSON.parse(await outText('signedIn'));
+    check('tắt passkey trong Cài đặt: KaiPass không chen vào', off.signedIn === true && !(await pk.isVisible()), JSON.stringify(off));
+    await cdp.send('WebAuthn.disable');
+    await ext.evaluate(() => chrome.storage.local.remove('kaipass.inline'));
+    await ext.goto(popupUrl);
+    await ext.getByTestId('suggestions').waitFor();
 
     // A code box on a site whose saved logins have no authenticator secret: say that, not "locked".
     await site.goto(`${ip}/otp`);

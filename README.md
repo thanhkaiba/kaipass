@@ -10,6 +10,8 @@ bạn. Không có server, không có phí hằng tháng.
 - Mã OTP (TOTP): quét mã QR mà không cần camera (mã QR đang hiện trên trang, ảnh chụp màn hình
   dán bằng Ctrl/⌘+V, file ảnh, hoặc camera nếu có), hoặc dán chuỗi `otpauth://…` / secret key.
   Đọc được cả mã "Export accounts" của Google Authenticator (thêm mọi tài khoản cùng lúc).
+- Passkey: extension lưu passkey vào vault và dùng nó để đăng nhập, thay cho hộp thoại passkey của
+  trình duyệt. Lưu theo định dạng của KeePassXC, nên KeePassXC cũng dùng được.
 - Nhập dữ liệu từ 1Password (file `.1pux`), gồm cả OTP, trường tuỳ chỉnh và file đính kèm.
 - Đồng bộ qua Google Drive, tự gộp khi hai thiết bị cùng sửa. Mất mạng vẫn xem và sửa được.
 - Có app riêng cho macOS, Windows, Linux và Android (APK, tự điền mật khẩu và OTP vào mọi app
@@ -131,6 +133,23 @@ Dùng cho Chrome, Edge, Brave trên Mac, Windows, Linux.
   bạn vẫn đang làm việc trên máy thì KaiPass không khoá giữa chừng; rời máy đủ lâu, hoặc máy khoá
   màn hình, thì khoá.
 - Tắt biểu tượng hoặc thẻ gợi ý trong **Cài đặt → Gợi ý trên trang web**.
+
+### Passkey
+
+- Trang đề nghị **tạo passkey**: thẻ KaiPass hiện ở giữa phía trên, bấm **Lưu passkey**. Passkey được
+  gắn vào đăng nhập đã lưu của trang đó (cùng tên đăng nhập), hoặc tạo mục mới nếu chưa có.
+- Trang đề nghị **đăng nhập bằng passkey**: thẻ KaiPass liệt kê các passkey của trang, bấm một cái là
+  xong. Nếu KaiPass đang khoá mà có passkey cho trang đó, thẻ có nút **Mở khoá**; mở xong thì đăng
+  nhập tiếp, không phải bấm lại trên trang.
+- **Dùng thiết bị khác** trả việc về cho trình duyệt (khoá bảo mật USB, điện thoại quét mã QR, Touch
+  ID / Windows Hello). KaiPass cũng tự nhường khi trang chỉ chấp nhận khoá bảo mật rời, hoặc chỉ định
+  một passkey không nằm trong KaiPass.
+- Passkey nằm trong file vault như mọi thứ khác, nên có trên mọi thiết bị dùng chung vault. Xem và
+  xoá passkey trong mục chứa nó (**Sửa → Xoá passkey**); nhớ gỡ passkey trong cài đặt bảo mật của
+  trang web tương ứng.
+- Passkey chỉ dùng được trên đúng tên miền đã tạo ra nó, và chỉ ở trang chính, không trong khung
+  (iframe) của trang khác.
+- Tắt trong **Cài đặt → Gợi ý trên trang web → Passkey** nếu muốn để trình duyệt tự xử lý.
 
 ### Cần biết
 

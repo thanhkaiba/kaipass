@@ -1,3 +1,4 @@
+import { verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server';
 import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { generatePassword } from './generator';
@@ -10,6 +11,7 @@ import * as brandData from '../icons/brands';
 import { brandFor, faviconUrls, inkOn, parseOverrides, resolveOverride } from './brandMatch';
 import { otpFromQrText } from './qr';
 import { buildKit, extractKey } from './recoveryKit';
+import { b64url as pk64, createPasskey, rpIdAllowed, signWithPasskey, unb64url } from './passkey';
 import { Vault, WrongPasswordError } from './vault';
 
 const draft = (over: Partial<Parameters<Vault['upsert']>[0]> = {}) => ({
@@ -460,3 +462,113 @@ describe('site logos', () => {
     expect(resolveOverride(brandData, undefined)).toBeNull();
   });
 });
+
+describe('passkeys', () => {
+  const origin = 'https://login.example.com';
+  const rpId = 'example.com';
+  const challenge = () => pk64(crypto.getRandomValues(new Uint8Array(32)));
+
+  it('registers and signs in against a real WebAuthn server library', async () => {
+    const registerChallenge = challenge();
+    const made = await createPasskey({ rpId, origin, challenge: registerChallenge, user: { id: pk64(new TextEncoder().encode('user-42')), name: 'theo@example.com' } });
+    const reg = await verifyRegistrationResponse({
+      response: {
+        id: made.passkey.credentialId,
+        rawId: made.passkey.credentialId,
+        type: 'public-key',
+        clientExtensionResults: {},
+        response: { clientDataJSON: made.response.clientDataJSON, attestationObject: made.response.attestationObject },
+      },
+      expectedChallenge: registerChallenge,
+      expectedOrigin: origin,
+      expectedRPID: rpId,
+      requireUserVerification: true,
+    });
+    expect(reg.verified).toBe(true);
+    const cred = reg.registrationInfo!.credential;
+    expect(cred.id).toBe(made.passkey.credentialId);
+    expect(reg.registrationInfo!.credentialBackedUp).toBe(true);
+    expect(made.passkey.privateKeyPem.startsWith('-----BEGIN PRIVATE KEY-----')).toBe(true);
+
+    const signChallenge = challenge();
+    const a = await signWithPasskey(made.passkey, { origin, challenge: signChallenge });
+    const auth = await verifyAuthenticationResponse({
+      response: {
+        id: made.passkey.credentialId,
+        rawId: made.passkey.credentialId,
+        type: 'public-key',
+        clientExtensionResults: {},
+        response: { clientDataJSON: a.clientDataJSON, authenticatorData: a.authenticatorData, signature: a.signature, userHandle: a.userHandle },
+      },
+      expectedChallenge: signChallenge,
+      expectedOrigin: origin,
+      expectedRPID: rpId,
+      credential: cred,
+      requireUserVerification: true,
+    });
+    expect(auth.verified).toBe(true);
+    expect(new TextDecoder().decode(unb64url(a.userHandle))).toBe('user-42');
+
+    // The same passkey does not sign for another origin's challenge check.
+    const wrong = await signWithPasskey(made.passkey, { origin: 'https://evil.example.net', challenge: signChallenge });
+    await expect(
+      verifyAuthenticationResponse({
+        response: { id: made.passkey.credentialId, rawId: made.passkey.credentialId, type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON: wrong.clientDataJSON, authenticatorData: wrong.authenticatorData, signature: wrong.signature } },
+        expectedChallenge: signChallenge,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
+        credential: cred,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('signs correctly many times over (DER encoding of every signature shape)', async () => {
+    const made = await createPasskey({ rpId, origin, challenge: challenge(), user: { id: 'dQ', name: 'u' } });
+    const reg = await verifyRegistrationResponse({
+      response: { id: made.passkey.credentialId, rawId: made.passkey.credentialId, type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON: made.response.clientDataJSON, attestationObject: made.response.attestationObject } },
+      expectedChallenge: (c: string) => c.length > 0,
+      expectedOrigin: origin,
+      expectedRPID: rpId,
+    });
+    for (let i = 0; i < 40; i++) {
+      const c = challenge();
+      const a = await signWithPasskey(made.passkey, { origin, challenge: c });
+      const ok = await verifyAuthenticationResponse({
+        response: { id: made.passkey.credentialId, rawId: made.passkey.credentialId, type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON: a.clientDataJSON, authenticatorData: a.authenticatorData, signature: a.signature } },
+        expectedChallenge: c,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
+        credential: reg.registrationInfo!.credential,
+      });
+      expect(ok.verified).toBe(true);
+    }
+  });
+
+  it('keeps a passkey on the vault item, out of the custom fields, across saving and reopening', async () => {
+    const made = await createPasskey({ rpId, origin, challenge: challenge(), user: { id: 'dXNlcg', name: 'theo@example.com' } });
+    const v = await Vault.create('correct horse battery');
+    const id = v.upsert({ type: 'login', title: 'Example', username: 'theo@example.com', password: 'pw', url: origin, notes: '', otp: '', fields: [{ name: 'PIN', value: '1234', secret: true }], tags: [], favorite: false, folderId: '', passkey: made.passkey });
+    const again = await Vault.open(await v.save(), 'correct horse battery');
+    const item = again.item(id)!;
+    expect(item.passkey).toEqual(made.passkey);
+    expect(item.fields.map((f) => f.name)).toEqual(['PIN']);
+    // Editing something else keeps it; clearing it removes it.
+    again.upsert({ ...item, password: 'pw2' });
+    expect(again.item(id)!.passkey?.credentialId).toBe(made.passkey.credentialId);
+    again.upsert({ ...again.item(id)!, passkey: undefined });
+    expect(again.item(id)!.passkey).toBeUndefined();
+  });
+
+  it('only lets a page use passkeys of its own site', () => {
+    expect(rpIdAllowed('example.com', 'login.example.com')).toBe(true);
+    expect(rpIdAllowed('login.example.com', 'login.example.com')).toBe(true);
+    expect(rpIdAllowed('example.com', 'example.com.evil.net')).toBe(false);
+    expect(rpIdAllowed('example.com', 'notexample.com')).toBe(false);
+    expect(rpIdAllowed('com', 'example.com')).toBe(false);
+    expect(rpIdAllowed('co.uk', 'shop.co.uk')).toBe(false);
+    expect(rpIdAllowed('github.io', 'me.github.io')).toBe(false);
+    expect(rpIdAllowed('localhost', 'localhost')).toBe(true);
+    expect(rpIdAllowed('accounts.example.com', 'example.com')).toBe(false);
+  });
+});
+

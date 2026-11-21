@@ -1,5 +1,6 @@
 // Builds the browser extension into dist-ext/: the app page (popup and full tab), the background
-// service worker and the content script. The last two must be single self-contained files.
+// service worker, the content script and the small page-world script. Those three must each be a
+// single self-contained file.
 // Run: npm run build:ext   (KAIPASS_TEST_HOSTS=1 makes the test build used by e2e/ext.cjs)
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
@@ -12,6 +13,8 @@ await build({ root, configFile: fileURLToPath(new URL('../vite.ext.config.ts', i
 for (const [entry, file] of [
   ['src/ext/background.ts', 'background.js'],
   ['src/ext/content.ts', 'content.js'],
+  // Runs in the page's own world, in front of navigator.credentials (passkeys).
+  ['src/ext/page.ts', 'page.js'],
 ]) {
   await build({
     root,

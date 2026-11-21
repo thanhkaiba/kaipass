@@ -9,7 +9,7 @@
  */
 import { defaultGen, generatePassword } from '../lib/generator';
 import { fillPage } from './fill';
-import type { FillReply, Request, SavePromptReply, StateReply, SuggestItem } from './match';
+import type { FillReply, PasskeyChoice, PkListReply, PkReply, Request, SavePromptReply, StateReply, SuggestItem } from './match';
 
 declare const __KAIPASS_TEST__: boolean;
 
@@ -133,11 +133,12 @@ declare const __KAIPASS_TEST__: boolean;
   .panel { position: fixed; display: none; min-width: 260px; max-width: 360px; max-height: 320px; overflow: auto;
     padding: 6px; border-radius: 10px; background: #fff; color: #1b2030; border: 1px solid #d9dee8;
     box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
-  .toast, .save { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
+  .toast, .save, .pk { position: fixed; top: 12px; right: 12px; width: 320px; display: none; padding: 10px; border-radius: 12px;
     background: #fff; color: #1b2030; border: 1px solid #d9dee8; box-shadow: 0 10px 28px rgb(0 0 0 / 22%); }
   /* Sign-in suggestions sit at the top centre, where the eye already is; save prompts stay in the corner. */
-  .toast { right: auto; left: 50%; transform: translateX(-50%); width: 340px; max-width: calc(100vw - 24px); }
+  .toast, .pk { right: auto; left: 50%; transform: translateX(-50%); width: 340px; max-width: calc(100vw - 24px); }
   .toast.corner { left: auto; right: 12px; transform: none; }
+  .pk .buttons { padding-top: 6px; }
   .head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; font-weight: 600; }
   .head .logo { width: 20px; height: 20px; border-radius: 5px; background: #2f6bff; flex: none; }
   .head .logo svg { width: 20px; height: 20px; display: block; }
@@ -174,7 +175,7 @@ declare const __KAIPASS_TEST__: boolean;
   .ghost { padding: 7px 12px; border: 1px solid #d9dee8; border-radius: 8px; background: transparent; color: #1b2030; }
   .link { padding: 7px 4px; border: 0; background: transparent; color: #5d667a; font-size: 12px; }
   @media (prefers-color-scheme: dark) {
-    .panel, .toast, .save { background: #1b1f2a; color: #e8ebf2; border-color: #323a4c; }
+    .panel, .toast, .save, .pk { background: #1b1f2a; color: #e8ebf2; border-color: #323a4c; }
     .ghost { color: #e8ebf2 !important; border-color: #323a4c !important; }
     .who { background: #242a38 !important; }
     .row:hover, .row:focus-visible { background: #1f2d4a; }
@@ -189,7 +190,8 @@ declare const __KAIPASS_TEST__: boolean;
 <button class="badge" part="badge" title="KaiPass" aria-label="KaiPass"></button>
 <div class="panel" role="listbox" aria-label="KaiPass"></div>
 <div class="toast" role="dialog" aria-label="KaiPass"></div>
-<div class="save" role="dialog" aria-label="Lưu vào KaiPass"></div>`;
+<div class="save" role="dialog" aria-label="Lưu vào KaiPass"></div>
+<div class="pk" role="dialog" aria-label="Passkey"></div>`;
   const LOGO = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect x="116" y="126" width="280" height="260" rx="36" fill="none" stroke="#fff" stroke-width="34"/><circle cx="256" cy="256" r="58" fill="none" stroke="#fff" stroke-width="34"/></svg>`;
   const badge = root.querySelector<HTMLButtonElement>('.badge')!;
   const panel = root.querySelector<HTMLDivElement>('.panel')!;
@@ -715,6 +717,163 @@ declare const __KAIPASS_TEST__: boolean;
     if (!(await maybeContinue())) await maybeToast();
   };
 
+  // ---- passkeys: the page's WebAuthn requests, passed on by src/ext/page.ts ----
+
+  const PK_TAG = 'kaipass-pk';
+  const pkCard = root.querySelector<HTMLDivElement>('.pk')!;
+  const toPage = (id: number, reply: unknown) => window.postMessage({ tag: PK_TAG, dir: 'in', id, reply }, location.origin);
+  /** A page inside another site's frame does not get passkeys from KaiPass. */
+  const ownTop = () => {
+    try {
+      return window.top!.location.origin === location.origin;
+    } catch {
+      return false;
+    }
+  };
+  /** The request the card on screen belongs to, and how to take it down. */
+  let pkOpen: { id: number; end: (reply: unknown | null) => void } | null = null;
+  /** Set while a card says "KaiPass is locked": what to do again once it is unlocked. */
+  let pkRetry: (() => void) | null = null;
+
+  function pkShow(id: number, conditional: boolean, title: string, sub: string, body: Node[], buttons: [label: string, kind: 'action' | 'ghost', run: () => void][]) {
+    pkOpen?.end(null);
+    const end = (reply: unknown | null) => {
+      if (pkOpen?.id === id) pkOpen = null;
+      pkRetry = null;
+      pkCard.style.display = 'none';
+      if (reply) toPage(id, reply);
+    };
+    pkOpen = { id, end };
+    const head = el('div', 'head');
+    const logo = el('span', 'logo');
+    logo.innerHTML = LOGO;
+    const text = el('span', 'grow');
+    text.append(el('div', '', title), el('div', 'sub', sub));
+    const close = el('button', 'x', '×');
+    close.setAttribute('aria-label', 'Đóng');
+    // Closing a sign-in the site is waiting on refuses it; a quiet suggestion is put away and the
+    // browser's own passkey autofill carries on.
+    onTrusted(close, () => end(conditional ? { action: 'native' } : { action: 'abort' }));
+    head.append(logo, text, close);
+    const row = el('div', 'buttons');
+    for (const [label, kind, run] of buttons) {
+      const b = el('button', kind, label);
+      onTrusted(b, run);
+      row.append(b);
+    }
+    pkCard.replaceChildren(head, ...body, ...(buttons.length ? [row] : []));
+    toast.style.display = 'none';
+    toastShown = true;
+    mount();
+    pkCard.style.display = 'block';
+    return end;
+  }
+
+  /** "KaiPass is locked", with a way to unlock (the request is taken up again afterwards) and a way round. */
+  function pkLocked(id: number, conditional: boolean, why: string, again: () => void) {
+    const end = pkShow(id, conditional, 'Passkey trong KaiPass', here(), [el('div', 'note', why)], [
+      ['Mở khoá', 'action', () => void ask({ type: 'open' })],
+      ...(conditional ? [] : ([['Dùng thiết bị khác', 'ghost', () => end({ action: 'native' })]] as [string, 'ghost', () => void][])),
+    ]);
+    pkRetry = again;
+  }
+
+  async function pkCreate(id: number, p: { rpId: string; rpName: string; user: { id: string; name: string; displayName: string }; challenge: string; algs: number[]; exclude: string[]; attachment: string }) {
+    // KaiPass makes ES256 passkeys; a site that asks for a plug-in security key wants something else.
+    if ((p.algs.length && !p.algs.includes(-7)) || p.attachment === 'cross-platform') return toPage(id, { action: 'native' });
+    if ((await refresh())?.locked) return pkLocked(id, false, 'KaiPass đang khoá. Mở khoá để lưu passkey của trang này vào KaiPass.', () => void pkCreate(id, p));
+    // The site lists the passkeys this user already has; one of them being in KaiPass means there
+    // is nothing new to make.
+    if (p.exclude.length) {
+      const have = await ask<PkListReply>({ type: 'pkList', rpId: p.rpId, allow: p.exclude });
+      if (have && !have.bad && have.items.length > 0) return toPage(id, { action: 'exists' });
+    }
+    const who = el('div', 'who');
+    who.append(el('div', 'title', p.user.name || p.user.displayName || '(không có tên)'), el('div', 'user', p.rpName || p.rpId || here()));
+    const end = pkShow(id, false, 'Lưu passkey vào KaiPass?', p.rpId || here(), [who], [
+      [
+        'Lưu passkey',
+        'action',
+        () => {
+          pkCard.style.display = 'none';
+          void ask<PkReply>({ type: 'pkCreate', rpId: p.rpId, rpName: p.rpName, user: p.user, challenge: p.challenge, exclude: p.exclude }).then((r) => {
+            if (r?.ok && r.result) end({ action: 'done', result: r.result });
+            else if (r?.error === 'exists') end({ action: 'exists' });
+            else if (r?.error === 'locked') pkLocked(id, false, 'KaiPass đang khoá. Mở khoá để lưu passkey của trang này vào KaiPass.', () => void pkCreate(id, p));
+            else end({ action: 'native' });
+          });
+        },
+      ],
+      ['Dùng thiết bị khác', 'ghost', () => end({ action: 'native' })],
+    ]);
+  }
+
+  async function pkGet(id: number, p: { rpId: string; challenge: string; allow: string[]; conditional: boolean }) {
+    const list = await ask<PkListReply>({ type: 'pkList', rpId: p.rpId, allow: p.allow });
+    if (!list || list.bad) return toPage(id, { action: 'native' });
+    if (list.locked) {
+      // Locked, and no passkey known for this site: nothing to offer, the browser carries on.
+      if (!list.has) return toPage(id, { action: 'native' });
+      return pkLocked(id, p.conditional, 'KaiPass có passkey cho trang này nhưng đang khoá.', () => void pkGet(id, p));
+    }
+    if (list.items.length === 0) return toPage(id, { action: 'native' });
+    const rows = list.items.map((item: PasskeyChoice) => {
+      const row = el('button', 'row');
+      row.type = 'button';
+      const text = el('span', 'text');
+      text.append(el('span', 'title', item.username || item.title || '(không tên)'), el('span', 'user', `Passkey · ${item.title}`));
+      row.append(el('span', 'avatar', '🔑'), text);
+      onTrusted(row, () => {
+        pkCard.style.display = 'none';
+        void ask<PkReply>({ type: 'pkSign', id: item.id, rpId: p.rpId, challenge: p.challenge }).then((r) => {
+          if (r?.ok && r.result) end({ action: 'done', result: r.result });
+          else if (r?.error === 'locked') pkLocked(id, p.conditional, 'KaiPass đang khoá.', () => void pkGet(id, p));
+          else end({ action: 'native' });
+        });
+      });
+      return row;
+    });
+    const list_ = el('div', 'list');
+    list_.append(...rows);
+    const end = pkShow(id, p.conditional, 'Đăng nhập bằng passkey', p.rpId || here(), [list_], p.conditional ? [] : [['Dùng thiết bị khác', 'ghost', () => end({ action: 'native' })]]);
+  }
+
+  window.addEventListener('message', (e) => {
+    const d = e.data as { tag?: string; dir?: string; id?: number; type?: string; payload?: unknown } | null;
+    if (e.source !== window || !d || d.tag !== PK_TAG || d.dir !== 'out' || typeof d.id !== 'number') return;
+    const { id, type } = d;
+    // Whatever the page sent is only ever read as short strings and lists of them.
+    const raw = (d.payload && typeof d.payload === 'object' ? d.payload : {}) as Record<string, unknown>;
+    const str = (v: unknown, max = 1024) => (typeof v === 'string' ? v.slice(0, max) : '');
+    const list = (v: unknown) => (Array.isArray(v) ? v.slice(0, 64).map((x) => str(x)) : []);
+    const user = (raw.user && typeof raw.user === 'object' ? raw.user : {}) as Record<string, unknown>;
+    if (type === 'cancel') {
+      if (pkOpen?.id === id) pkOpen.end(null); // the page gave up waiting (it has its own answer for that)
+      return;
+    }
+    void (async () => {
+      const s = state ?? (await refresh());
+      const on = !!s && s.prefs.passkeys && ownTop();
+      if (type === 'available') return toPage(id, { yes: on });
+      if (!on) return toPage(id, { action: 'native' });
+      if (type === 'create') {
+        return pkCreate(id, {
+          rpId: str(raw.rpId, 253),
+          rpName: str(raw.rpName, 120),
+          user: { id: str(user.id), name: str(user.name, 256), displayName: str(user.displayName, 256) },
+          challenge: str(raw.challenge, 2048),
+          algs: Array.isArray(raw.algs) ? raw.algs.filter((a): a is number => typeof a === 'number').slice(0, 32) : [],
+          exclude: list(raw.exclude),
+          attachment: str(raw.attachment, 32),
+        });
+      }
+      if (type === 'get') return pkGet(id, { rpId: str(raw.rpId, 253), challenge: str(raw.challenge, 2048), allow: list(raw.allow), conditional: raw.conditional === true });
+      toPage(id, { action: 'native' });
+    })();
+  });
+  // Tells the page-side script that requests can be answered from now on.
+  if (location.origin !== 'null') window.postMessage({ tag: PK_TAG, dir: 'in', type: 'ready' }, location.origin);
+
   /**
    * The vault was unlocked (in KaiPass's own window) while this page was showing "locked": redraw
    * what is on screen with the logins, instead of leaving the stale message until a reload.
@@ -723,6 +882,7 @@ declare const __KAIPASS_TEST__: boolean;
     const wasLocked = !state || state.locked;
     const s = await refresh();
     if (!s || s.locked || !wasLocked) return;
+    pkRetry?.();
     if (field && field.isConnected && (panel.style.display === 'block' || document.activeElement === field)) await openPanel();
     await onPageChange();
   }

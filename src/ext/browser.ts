@@ -3,7 +3,7 @@ import { parseOtp, totp } from '../lib/totp';
 import type { Item, ItemDraft, Vault } from '../lib/vault';
 import { LOGO_SETTING, parseOverrides } from '../lib/brandMatch';
 import { fillPage, type FillResult } from './fill';
-import { FILL_INDEX_KEY, hostMatches, hostOf, matchScore, UNLOCK_KEY, type FillEntry, type UnlockRecord } from './match';
+import { FILL_INDEX_KEY, hostMatches, hostOf, matchScore, PK_INDEX_KEY, PK_SITES_KEY, UNLOCK_KEY, type FillEntry, type PasskeyEntry, type UnlockRecord } from './match';
 
 export { hostMatches, hostOf };
 
@@ -122,6 +122,7 @@ export async function forget(): Promise<void> {
   lockedHere = true;
   await memory.remove(UNLOCK_KEY);
   await memory.remove(FILL_INDEX_KEY);
+  await memory.remove(PK_INDEX_KEY);
   await memory.remove(VIEW_KEY);
 }
 
@@ -187,5 +188,12 @@ export async function writeFillIndex(vault: Vault): Promise<void> {
     if (!hosts.length) continue;
     entries.push({ id: i.id, title: i.title, username: i.username, password: i.password, otp: i.otp, hosts, modified: i.modified, logo: logos[i.id] });
   }
+  // Passkeys go out before the logins: pages are told "unlocked" when the login list appears.
+  const passkeys: PasskeyEntry[] = vault
+    .items()
+    .filter((i) => !i.trashed && i.passkey)
+    .map((i) => ({ id: i.id, title: i.title, username: i.passkey!.username || i.username, passkey: i.passkey! }));
+  await memory.set(PK_INDEX_KEY, passkeys);
+  await chrome.storage.local.set({ [PK_SITES_KEY]: [...new Set(passkeys.map((p) => p.passkey.rpId))] });
   await memory.set(FILL_INDEX_KEY, entries);
 }

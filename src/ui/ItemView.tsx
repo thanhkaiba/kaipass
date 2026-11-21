@@ -75,7 +75,7 @@ export function ItemView({
     if (fileInput.current) fileInput.current.value = '';
   };
 
-  const hasMain = item.username || item.password || item.otp || item.url || item.fields.length > 0;
+  const hasMain = item.username || item.password || item.otp || item.url || item.fields.length > 0 || !!item.passkey;
 
   return (
     <div className="detail">
@@ -163,6 +163,20 @@ export function ItemView({
             <Row key={f.name} label={fieldLabel(f.name)} value={f.value} secret={f.secret} link={!f.secret} />
           ))}
           {item.otp && <Row label="Mã bí mật OTP" value={item.otp} secret />}
+          {item.passkey && (
+            <div className="row" data-testid="passkey-row">
+              <div className="row-main">
+                <div className="row-label">Passkey</div>
+                <div className="row-value passkey-value">
+                  <Icon name="finger" />
+                  <span>
+                    {item.passkey.rpId}
+                    {item.passkey.username && ` · ${item.passkey.username}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

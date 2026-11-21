@@ -1,5 +1,6 @@
 import type * as K from 'kdbxweb';
 import { kdbxweb } from './kx';
+import { PASSKEY_FIELDS, type Passkey } from './passkey';
 
 export type ItemType = 'login' | 'card' | 'identity' | 'note';
 
@@ -28,6 +29,8 @@ export interface ItemDraft {
   tags: string[];
   favorite: boolean;
   folderId: string;
+  /** A passkey for the item's site, when one was saved. */
+  passkey?: Passkey;
 }
 
 export interface Item extends ItemDraft {
@@ -220,8 +223,15 @@ export class Vault {
       (Object.keys(TYPE_TAG) as (keyof typeof TYPE_TAG)[]).find((t) => tags.includes(TYPE_TAG[t])) ||
       'login';
     const fields: ItemField[] = [];
+    const pk = (key: keyof typeof PASSKEY_FIELDS) => text(e.fields.get(PASSKEY_FIELDS[key]));
+    // KeePassXC 2.7.7 called the credential id "generated user id".
+    const credentialId = pk('credentialId') || text(e.fields.get('KPEX_PASSKEY_GENERATED_USER_ID'));
+    const passkey: Passkey | undefined =
+      credentialId && pk('privateKeyPem') && pk('rpId')
+        ? { credentialId, privateKeyPem: pk('privateKeyPem'), rpId: pk('rpId'), username: pk('username'), userHandle: pk('userHandle') }
+        : undefined;
     for (const [name, value] of e.fields) {
-      if (STD.includes(name) || name === OTP) continue;
+      if (STD.includes(name) || name === OTP || name.startsWith('KPEX_PASSKEY_')) continue;
       fields.push({ name, value: text(value), secret: typeof value !== 'string' });
     }
     const attachments: Attachment[] = [];
@@ -239,6 +249,7 @@ export class Vault {
       notes: text(e.fields.get('Notes')),
       otp: text(e.fields.get(OTP)),
       fields,
+      passkey,
       tags: tags.filter((t) => !RESERVED_TAGS.has(t)),
       favorite: tags.includes(FAV_TAG),
       folderId: parent && parent !== this.root ? parent.uuid.id : '',
@@ -277,7 +288,15 @@ export class Vault {
     e.fields.set('URL', d.url.trim());
     e.fields.set('Notes', d.notes);
     if (d.otp.trim()) e.fields.set(OTP, P.fromString(d.otp.trim()));
-    const used = new Set<string>([...STD, OTP]);
+    if (d.passkey) {
+      // The fields KeePassXC keeps a passkey in, so the file stays usable there.
+      e.fields.set(PASSKEY_FIELDS.credentialId, P.fromString(d.passkey.credentialId));
+      e.fields.set(PASSKEY_FIELDS.privateKeyPem, P.fromString(d.passkey.privateKeyPem));
+      e.fields.set(PASSKEY_FIELDS.rpId, d.passkey.rpId);
+      e.fields.set(PASSKEY_FIELDS.username, d.passkey.username);
+      e.fields.set(PASSKEY_FIELDS.userHandle, P.fromString(d.passkey.userHandle));
+    }
+    const used = new Set<string>([...STD, OTP, ...Object.values(PASSKEY_FIELDS)]);
     for (const f of d.fields) {
       const base = f.name.trim();
       if (!base || !f.value) continue;

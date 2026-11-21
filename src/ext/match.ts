@@ -1,5 +1,6 @@
 /** Address matching shared by the popup and the background worker. No DOM or chrome.* use here. */
 import { getDomain } from 'tldts';
+import type { Passkey } from '../lib/passkey';
 
 /** Host name without "www.", or '' for anything that is not a web address. */
 export function hostOf(url: string): string {
@@ -90,9 +91,11 @@ export interface InlinePrefs {
   toast: boolean;
   /** After filling from a suggestion: press the sign-in button, and carry on through the next steps (password, OTP). */
   autoSubmit: boolean;
+  /** Offer to keep passkeys in KaiPass, and to sign in with the ones kept there. */
+  passkeys: boolean;
 }
 
-export const defaultInlinePrefs: InlinePrefs = { icon: true, toast: true, autoSubmit: true };
+export const defaultInlinePrefs: InlinePrefs = { icon: true, toast: true, autoSubmit: true, passkeys: true };
 
 // ---- messages between the content script and the background worker ----
 
@@ -114,6 +117,12 @@ export type Request =
   | { type: 'flow'; want: 'password' | 'otp' }
   /** What the user-started fill put on the page, so the same step is not repeated. */
   | { type: 'flowStep'; username: boolean; password: boolean; otp: boolean }
+  /** Passkeys kept for this site (`allow`: only these credential ids, when the site names them). */
+  | { type: 'pkList'; rpId: string; allow: string[] }
+  /** Sign the site's challenge with the passkey on item `id`. */
+  | { type: 'pkSign'; id: string; rpId: string; challenge: string }
+  /** Make a passkey for this site and keep it in the vault. */
+  | { type: 'pkCreate'; rpId: string; rpName: string; user: { id: string; name: string; displayName: string }; challenge: string; exclude: string[] }
   | { type: 'open' }
   | { type: 'sawUsername'; username: string }
   | { type: 'captured'; username: string; password: string }
@@ -135,6 +144,41 @@ export interface SavePromptReply {
   prompt: SavePrompt | null;
   username?: string;
   host?: string;
+}
+
+/** A passkey as the page's card lists it: no key material. */
+export interface PasskeyChoice {
+  id: string;
+  title: string;
+  username: string;
+}
+
+export interface PkListReply {
+  locked: boolean;
+  /** While locked: whether a passkey is known to exist for this site. */
+  has: boolean;
+  /** The site may not use passkeys for that id (not its own domain): leave it to the browser to refuse. */
+  bad?: boolean;
+  items: PasskeyChoice[];
+}
+
+export interface PkReply {
+  ok: boolean;
+  error?: 'locked' | 'exists' | 'bad' | 'failed';
+  /** base64url pieces of the WebAuthn answer, plus `credentialId`. */
+  result?: Record<string, string>;
+}
+
+/** Passkeys of the open vault, for the background worker (memory-only session storage). */
+export const PK_INDEX_KEY = 'kaipass.pk';
+/** The sites that have a passkey, kept across locks so a locked KaiPass knows to ask for an unlock. No secrets. */
+export const PK_SITES_KEY = 'kaipass.pkSites';
+
+export interface PasskeyEntry {
+  id: string;
+  title: string;
+  username: string;
+  passkey: Passkey;
 }
 
 export interface StateReply {

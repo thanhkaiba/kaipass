@@ -577,6 +577,13 @@ export function Settings({
                     <Switch label="Tự đăng nhập sau khi điền" checked={inline.autoSubmit} onChange={(v) => setInlinePref({ autoSubmit: v })} />
                   </Setting>
                   <Setting
+                    icon="finger"
+                    title="Passkey"
+                    info="Khi trang web đề nghị tạo passkey, KaiPass hỏi lưu vào vault; lần sau KaiPass đưa passkey đó ra để đăng nhập. Passkey đồng bộ cùng vault. Tắt đi thì trình duyệt và hệ điều hành xử lý passkey như cũ."
+                  >
+                    <Switch label="Passkey" checked={inline.passkeys} onChange={(v) => setInlinePref({ passkeys: v })} />
+                  </Setting>
+                  <Setting
                     icon="login"
                     title="Chrome hỏi lưu mật khẩu"
                     info="Tắt để chỉ KaiPass hỏi lưu. Danh sách mật khẩu Chrome đã lưu vẫn hiện dưới ô nhập: extension không ẩn được nó. Muốn hết hẳn, xoá các mật khẩu đó trong trình quản lý mật khẩu của Chrome."

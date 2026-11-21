@@ -3149,3 +3149,13 @@ body {
   color: var(--warn);
   background: var(--warn-soft);
 }
+
+.passkey-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.passkey-value .icon {
+  color: var(--accent);
+}
