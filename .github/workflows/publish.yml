@@ -51,6 +51,10 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon testDebugUnitTest
 
+      # The passkey answers the Kotlin tests just wrote, checked by a WebAuthn server library.
+      - name: Check the Android app's passkeys
+        run: node e2e/android-passkey.cjs
+
       # The APK must always be signed with the same key: Android only installs updates signed with
       # the key of the installed app, and Google sign-in is tied to that key's SHA-1. Without the
       # secrets (Settings → Secrets and variables → Actions) no APK is published.

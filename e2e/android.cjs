@@ -132,6 +132,12 @@ async function run(browser) {
   await page.evaluate(() => window.__emit('resume'));
   await page.getByText('KaiPass đang tự điền').waitFor();
   check('Android: mở cài đặt tự điền của máy, quay lại thì cập nhật', n.calls.includes('openAutofillSettings'));
+  const pkSetting = page.locator('.setting', { hasText: 'Passkey' });
+  check('Android 14+: Cài đặt có mục Passkey, báo chưa bật', (await pkSetting.textContent()).includes('Chưa bật'));
+  await pkSetting.getByRole('button', { name: 'Bật' }).click();
+  await page.evaluate(() => window.__emit('resume'));
+  await page.getByText('KaiPass đang giữ passkey').waitFor();
+  check('Android: mở cài đặt passkey của máy, quay lại thì cập nhật', n.calls.includes('openPasskeySettings'));
 
   // ---- fingerprint through the phone's keystore ----
   await backToSections(page);
@@ -210,6 +216,29 @@ async function run(browser) {
   check('Android: mật khẩu đã tạo vào vault, gắn đúng trang và app', made.length === 2 && made.some((e) => e.hosts.includes('shop.example') && e.username === 'dave@example.com') && made.some((e) => e.apps.includes('com.bank.app') && e.username === '0909000111'));
   await page.waitForTimeout(400);
   check('Android: hết danh sách chờ thì không hỏi nữa', (await page.getByRole('dialog').count()) === 0);
+
+  // ---- passkeys made through Android's passkey sheet go into the vault ----
+  const pem = '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----';
+  const ghKey = { passkey: { credentialId: 'cred-gh', privateKeyPem: pem, rpId: 'github.com', username: 'user@example.com', userHandle: 'dQ' }, rpName: 'GitHub', origin: 'https://github.com' };
+  n.newPasskeys = [ghKey];
+  await page.evaluate(() => window.__emit('resume'));
+  await until(page, () => n.passkeysDone.length === 1 && n.index.entries.some((e) => e.passkey), 'passkey vào vault');
+  const withKey = n.index.entries.filter((e) => e.passkey);
+  check('Android: passkey tạo trên máy được gắn vào đăng nhập đã có của trang đó', withKey.length === 1 && withKey[0].title === 'GitHub' && withKey[0].password === 'new-gh-pass' && withKey[0].passkey.credentialId === 'cred-gh', JSON.stringify(withKey.map((e) => e.title)));
+  check('Android: báo app đã cất passkey vào vault', n.passkeysDone[0].join() === 'cred-gh' && n.newPasskeys.length === 0);
+  // One made while KaiPass was locked: taken in on unlock, before the phone gets the list.
+  const before = n.index.entries.length;
+  n.newPasskeys = [ghKey, { passkey: { credentialId: 'cred-new', privateKeyPem: pem, rpId: 'newsite.example', username: 'erin', userHandle: 'ZQ' }, rpName: 'New Site', origin: 'https://newsite.example' }];
+  n.index = null;
+  await page.reload();
+  await until(page, () => n.passkeysDone.length === 2 && n.index?.entries?.some((e) => e.title === 'New Site'), 'passkey lúc mở khoá');
+  const fresh = n.index.entries.find((e) => e.title === 'New Site');
+  check('Android: passkey của trang chưa có đăng nhập thành mục mới', fresh.username === 'erin' && fresh.password === '' && fresh.passkey.rpId === 'newsite.example' && fresh.hosts.join() === 'newsite.example');
+  check('Android: passkey gửi lại lần hai không tạo mục trùng', n.index.entries.length === before + 1 && n.index.entries.filter((e) => e.passkey?.credentialId === 'cred-gh').length === 1);
+  await page.locator('.item', { hasText: 'New Site' }).first().click();
+  check('Android: mục mới hiện passkey', (await page.getByTestId('passkey-row').textContent()).includes('newsite.example'));
+  await shot('passkey-item');
+  await page.getByRole('button', { name: 'Quay lại danh sách' }).click();
 
   // ---- files are saved through the app ----
   await openSettings(page);

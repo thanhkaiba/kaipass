@@ -15,6 +15,8 @@ const BIO_WINDOW = new URLSearchParams(location.search).has('bio');
 let askedOnOpen = false;
 /** Set when Android's autofill opened KaiPass to fill a login: the app or site it is for. */
 const AUTOFILL_FOR = isAndroid ? new URLSearchParams(location.search).get('autofill') : null;
+/** …or to sign in there with a passkey. */
+const FOR_PASSKEY = new URLSearchParams(location.search).get('for') === 'passkey';
 
 export function Lock({
   meta,
@@ -121,9 +123,9 @@ export function Lock({
         </div>
         {AUTOFILL_FOR && (
           <p className="autofill-for" role="status">
-            <Icon name="key" />
+            <Icon name={FOR_PASSKEY ? 'finger' : 'key'} />
             <span>
-              Mở khoá để tự điền cho <strong>{AUTOFILL_FOR}</strong>
+              {FOR_PASSKEY ? 'Mở khoá để dùng passkey cho' : 'Mở khoá để tự điền cho'} <strong>{AUTOFILL_FOR}</strong>
             </span>
           </p>
         )}

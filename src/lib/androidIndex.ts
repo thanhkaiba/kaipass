@@ -5,6 +5,7 @@
  */
 import { getDomain, getDomainWithoutSuffix } from 'tldts';
 import { hostOf } from '../ext/match';
+import type { Passkey } from './passkey';
 import type { Item, Vault } from './vault';
 
 export interface AndroidEntry {
@@ -17,6 +18,8 @@ export interface AndroidEntry {
   sites: string[];
   labels: string[];
   apps: string[];
+  /** For Android's passkey sheet (Android 14+). */
+  passkey?: Passkey;
 }
 
 const uniq = (a: (string | null | undefined)[]) => [...new Set(a.filter((x): x is string => !!x))];
@@ -34,7 +37,7 @@ export function androidEntries(vault: Vault): AndroidEntry[] {
   const out: AndroidEntry[] = [];
   for (const i of vault.items()) {
     if (i.trashed || i.type !== 'login') continue;
-    if (!i.username && !i.password && !i.otp) continue;
+    if (!i.username && !i.password && !i.otp && !i.passkey) continue;
     const urls = addressesOf(i);
     const hosts = uniq(urls.map(hostOf));
     out.push({
@@ -47,6 +50,7 @@ export function androidEntries(vault: Vault): AndroidEntry[] {
       sites: uniq(hosts.map((h) => getDomain(h, { allowPrivateDomains: true }))),
       labels: uniq(hosts.map((h) => getDomainWithoutSuffix(h, { allowPrivateDomains: true }))),
       apps: uniq(urls.map(appOf)),
+      ...(i.passkey ? { passkey: i.passkey } : {}),
     });
   }
   return out;

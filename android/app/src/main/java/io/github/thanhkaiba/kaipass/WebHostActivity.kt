@@ -2,6 +2,7 @@ package io.github.thanhkaiba.kaipass
 
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentSender
 import android.net.Uri
@@ -210,9 +211,19 @@ abstract class WebHostActivity : FragmentActivity() {
             "openUrl" -> { openExternal(Uri.parse(args.getString("url"))); ok(true) }
             "saveFile" -> saveFile(args.getString("name"), args.optString("mime", "application/octet-stream"), args.getString("data"), ok)
             "setFillIndex" -> {
-                FillIndex.publish(FillIndex.parse(args.optJSONArray("entries") ?: JSONArray()), args.optInt("lockMinutes", 10))
+                val entries = FillIndex.parse(args.optJSONArray("entries") ?: JSONArray())
+                // Site names only, kept while locked so a passkey request can offer to unlock.
+                PasskeySites.set(this, entries.mapNotNull { it.passkey?.rpId }.toSet())
+                FillIndex.publish(entries, args.optInt("lockMinutes", 10))
                 ok(true)
             }
+            "newPasskeys" -> ok(JSONArray(NewPasskeys.all(this).map { it.toJson() }))
+            "passkeysDone" -> {
+                val ids = args.optJSONArray("ids") ?: JSONArray()
+                NewPasskeys.remove(this, (0 until ids.length()).map { B64.normal(ids.getString(it)) }.toSet())
+                ok(true)
+            }
+            "openPasskeySettings" -> { openPasskeySettings(); ok(true) }
             "clearFillIndex" -> { FillIndex.clear(); ok(true) }
             "touch" -> { FillIndex.touch(); ok(true) }
             "openAutofillSettings" -> {
@@ -231,6 +242,32 @@ abstract class WebHostActivity : FragmentActivity() {
 
     protected open fun onSaveDone() {}
 
+    /** Android 14+: whether KaiPass is switched on under "Passwords, passkeys & autofill". */
+    private fun passkeysEnabled(): Boolean {
+        if (Build.VERSION.SDK_INT < 34) return false
+        return try {
+            getSystemService(android.credentials.CredentialManager::class.java)
+                ?.isEnabledCredentialProviderService(ComponentName(this, KaiPassCredentialService::class.java)) == true
+        } catch (e: RuntimeException) {
+            false
+        }
+    }
+
+    private fun openPasskeySettings() {
+        val attempts = listOfNotNull(
+            if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_CREDENTIAL_PROVIDER).setData(Uri.parse("package:$packageName")) else null,
+            Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE).setData(Uri.parse("package:$packageName")),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+        for (i in attempts) {
+            try {
+                return startActivity(i)
+            } catch (e: ActivityNotFoundException) {
+                /* try the next screen */
+            }
+        }
+    }
+
     private fun info(): JSONObject {
         val af = getSystemService(AutofillManager::class.java)
         return JSONObject()
@@ -242,6 +279,7 @@ abstract class WebHostActivity : FragmentActivity() {
             .put("autofill", JSONObject()
                 .put("supported", af?.isAutofillSupported == true)
                 .put("enabled", af?.hasEnabledAutofillServices() == true))
+            .put("passkeys", JSONObject().put("supported", Build.VERSION.SDK_INT >= 34).put("enabled", passkeysEnabled()))
             .put("bio", JSONObject().put("available", Bio.available(this)).put("enrolled", Bio.enrolled(this)))
     }
 

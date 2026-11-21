@@ -14,10 +14,14 @@ function fakeNative() {
     /** Several logins waiting, as the app's list holds them; `pendingSave` is a one-off. */
     pendingQueue: [],
     saveDone: [],
+    /** Passkeys made through Android's passkey sheet, waiting to go into the vault. */
+    newPasskeys: [],
+    passkeysDone: [],
+    passkeysOn: false,
   };
   n.handle = (method, args) => {
     n.calls.push(method);
-    const info = () => ({ platform: 'android', version: '0.1.0', sdk: 35, package: 'io.github.thanhkaiba.kaipass', sha1: 'DC:A5:E3:99', autofill: { supported: true, enabled: n.autofill }, bio: { available: true, enrolled: !!n.bio } });
+    const info = () => ({ platform: 'android', version: '0.1.0', sdk: 35, package: 'io.github.thanhkaiba.kaipass', sha1: 'DC:A5:E3:99', autofill: { supported: true, enabled: n.autofill }, passkeys: { supported: true, enabled: n.passkeysOn }, bio: { available: true, enrolled: !!n.bio } });
     switch (method) {
       case 'hello':
       case 'info':
@@ -50,6 +54,15 @@ function fakeNative() {
         return true;
       case 'openAutofillSettings':
         n.autofill = true;
+        return true;
+      case 'newPasskeys':
+        return n.newPasskeys;
+      case 'passkeysDone':
+        n.passkeysDone.push(args.ids);
+        n.newPasskeys = n.newPasskeys.filter((p) => !args.ids.includes(p.passkey.credentialId));
+        return true;
+      case 'openPasskeySettings':
+        n.passkeysOn = true;
         return true;
       case 'pendingSave':
         return n.pendingQueue[0] ?? n.pendingSave;

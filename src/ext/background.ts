@@ -292,7 +292,7 @@ async function handle(req: Request, sender: chrome.runtime.MessageSender): Promi
     try {
       const made = await createPasskey({ rpId, origin: frame.origin, challenge: req.challenge, user: { id: req.user.id, name: (req.user.name || req.user.displayName).slice(0, 256) } });
       // In the vault first: a passkey the site knows about but KaiPass lost would lock the user out.
-      await savePasskey(record.password, { host: hostOf(sender.url ?? ''), origin: frame.origin, rpName: req.rpName.slice(0, 120), passkey: made.passkey });
+      await savePasskey(record.password, { origin: frame.origin, rpName: req.rpName.slice(0, 120), passkey: made.passkey });
       return { ok: true, result: { ...made.response, credentialId: made.passkey.credentialId } } satisfies PkReply;
     } catch {
       return { ok: false, error: 'failed' } satisfies PkReply;

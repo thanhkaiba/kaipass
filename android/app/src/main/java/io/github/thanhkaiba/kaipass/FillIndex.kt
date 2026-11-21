@@ -42,6 +42,9 @@ object FillIndex {
 
     fun find(id: String): Entry? = current()?.firstOrNull { it.id == id }
 
+    /** When the vault was last unlocked for a passkey request, so the user is not asked twice in a row. */
+    @Volatile var unlockedForPasskeyAt = 0L
+
     fun onPublish(l: () -> Unit) = synchronized(listeners) { listeners += l }
     fun offPublish(l: () -> Unit) = synchronized(listeners) { listeners -= l }
 
@@ -57,6 +60,7 @@ object FillIndex {
             sites = strings(o, "sites"),
             labels = strings(o, "labels"),
             apps = strings(o, "apps"),
+            passkey = Passkey.fromJson(o.optJSONObject("passkey")),
         )
     }
 

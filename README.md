@@ -10,8 +10,9 @@ bạn. Không có server, không có phí hằng tháng.
 - Mã OTP (TOTP): quét mã QR mà không cần camera (mã QR đang hiện trên trang, ảnh chụp màn hình
   dán bằng Ctrl/⌘+V, file ảnh, hoặc camera nếu có), hoặc dán chuỗi `otpauth://…` / secret key.
   Đọc được cả mã "Export accounts" của Google Authenticator (thêm mọi tài khoản cùng lúc).
-- Passkey: extension lưu passkey vào vault và dùng nó để đăng nhập, thay cho hộp thoại passkey của
-  trình duyệt. Lưu theo định dạng của KeePassXC, nên KeePassXC cũng dùng được.
+- Passkey: extension trình duyệt và app Android (Android 14+) lưu passkey vào vault và dùng nó để
+  đăng nhập, kể cả khi quét mã QR bằng điện thoại để đăng nhập trên máy khác. Lưu theo định dạng của
+  KeePassXC, nên KeePassXC cũng dùng được.
 - Nhập dữ liệu từ 1Password (file `.1pux`), gồm cả OTP, trường tuỳ chỉnh và file đính kèm.
 - Đồng bộ qua Google Drive, tự gộp khi hai thiết bị cùng sửa. Mất mạng vẫn xem và sửa được.
 - Có app riêng cho macOS, Windows, Linux và Android (APK, tự điền mật khẩu và OTP vào mọi app
@@ -189,6 +190,8 @@ của Android, mở khoá bằng vân tay/khuôn mặt/mã PIN, và đăng nhậ
 4. **Cài đặt → Tự điền → Bật** rồi chọn KaiPass. Với Chrome: Cài đặt → Dịch vụ tự động điền →
    *Tự động điền bằng dịch vụ khác*. Firefox, Brave, Edge, Cốc Cốc và Samsung Internet dùng được ngay.
 5. **Cài đặt → Bảo mật → Vân tay / mật khẩu máy** để mở khoá không cần gõ master password.
+6. Android 14 trở lên: **Cài đặt → Tự điền → Passkey → Bật** để KaiPass giữ passkey (xem phần Passkey
+   bên dưới).
 
 ### Dùng
 
@@ -205,6 +208,28 @@ của Android, mở khoá bằng vân tay/khuôn mặt/mã PIN, và đăng nhậ
 - Ô cần **mật khẩu mới** (đăng ký, đổi mật khẩu): chọn **Tạo mật khẩu mạnh**. KaiPass điền mật khẩu
   20 ký tự vào ô mật khẩu và ô nhập lại, rồi giữ nó trong danh sách chờ (đã mã hoá trên máy). Lần tới
   mở KaiPass, app hỏi lưu vào vault.
+
+### Passkey (Android 14+)
+
+- Bật một lần: **Cài đặt → Tự điền → Passkey → Bật**, đồng ý trong hộp thoại của Android. (Hoặc Cài
+  đặt của máy → Mật khẩu, khoá truy cập và tự động điền → bật KaiPass.)
+- **Đăng nhập:** khi app hoặc trang web đề nghị dùng passkey, bảng của Android hiện các passkey trong
+  KaiPass. Chọn một cái, chạm vân tay (hoặc mã PIN của máy), xong.
+- **Tạo passkey:** khi trang đề nghị tạo, chọn **KaiPass** trên bảng của Android rồi chạm vân tay.
+  Passkey dùng được ngay và được giữ trên máy (đã mã hoá); lần tới KaiPass mở khoá, nó tự vào vault,
+  gắn vào đăng nhập đã có của trang đó, và lên Drive. Nên mở KaiPass sớm sau khi tạo để passkey có bản
+  sao trên Drive.
+- **Đăng nhập trên máy khác bằng điện thoại:** trên máy tính chọn "dùng điện thoại / thiết bị khác",
+  quét mã QR bằng camera điện thoại (cần Bluetooth bật ở cả hai máy), rồi chọn passkey trong KaiPass.
+- **Khi vault đang khoá:** nếu vault có passkey cho trang đó, bảng của Android có dòng **Mở khoá
+  KaiPass để dùng passkey**. Mở khoá xong thì chọn passkey, không phải chạm vân tay lần nữa.
+- Passkey tạo bằng extension trên máy tính dùng được trên điện thoại và ngược lại, vì chúng nằm trong
+  cùng một vault. Passkey vừa tạo trên máy khác xuất hiện sau khi KaiPass trên điện thoại đồng bộ (mở
+  app một lần).
+- Trình duyệt được phép hỏi passkey thay cho trang web là các trình duyệt trong danh sách Google công
+  bố (Chrome, Firefox, Brave, Edge, Samsung Internet…). App thường chỉ dùng được passkey của trang
+  web đã khai báo app đó (Digital Asset Links), nên cần mạng ở lần kiểm tra này.
+- Chrome bản cũ (trước 131) chưa dùng được passkey từ app ngoài Google; hãy cập nhật Chrome.
 
 ### Cần biết
 

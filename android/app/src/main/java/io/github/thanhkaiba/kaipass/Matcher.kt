@@ -19,7 +19,11 @@ data class Entry(
     val labels: List<String>,
     /** Android package names saved as androidapp:// addresses. */
     val apps: List<String>,
-)
+    val passkey: Passkey? = null,
+) {
+    /** Something autofill can type; a login that only holds a passkey has nothing. */
+    val fillable: Boolean get() = username.isNotEmpty() || password.isNotEmpty() || otp.isNotEmpty()
+}
 
 /** Where the user is filling: a web page's domain (in a browser) or an app's package. */
 data class Target(val domain: String?, val packageName: String) {
@@ -77,7 +81,7 @@ object Matcher {
      * phone (`lastUsed`: id → time), then by name.
      */
     fun matches(entries: List<Entry>, t: Target, learned: Set<String> = emptySet(), lastUsed: Map<String, Long> = emptyMap()): List<Entry> =
-        entries.map { it to score(it, t, learned) }
+        entries.filter { it.fillable }.map { it to score(it, t, learned) }
             .filter { it.second > 0 }
             .sortedWith(
                 compareByDescending<Pair<Entry, Int>> { it.second }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android offers passkeys from apps like KaiPass from version 14 on. -->
+    <bool name="has_passkeys">false</bool>
+</resources>

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -66,6 +67,44 @@
             android:taskAffinity=""
             android:theme="@style/Theme.KaiPass.Dialog"
             android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!-- Unlocks the vault for a passkey sign-in, then hands the site's passkeys back. -->
+        <activity
+            android:name=".PasskeyUnlockActivity"
+            tools:targetApi="34"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
+            android:enabled="@bool/has_passkeys"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Shows only the phone's fingerprint prompt: signs in with a passkey, or makes a new one. -->
+        <activity
+            android:name=".PasskeyActivity"
+            tools:targetApi="34"
+            android:enabled="@bool/has_passkeys"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.KaiPass.Clear" />
+
+        <!-- Android 14+: passkeys for apps, browsers, and sign-ins on another device (QR code). -->
+        <service
+            android:name=".KaiPassCredentialService"
+            tools:targetApi="34"
+            android:enabled="@bool/has_passkeys"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.credentials.provider"
+                android:resource="@xml/credential_provider" />
+        </service>
 
         <service
             android:name=".KaiPassAutofillService"

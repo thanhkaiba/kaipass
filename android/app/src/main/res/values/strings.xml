@@ -16,4 +16,16 @@
     <string name="generate_password_sub">KaiPass tạo và lưu giúp bạn</string>
     <string name="generated_toast">KaiPass đã điền mật khẩu mới. Mở KaiPass để lưu vào vault.</string>
     <string name="save_later">Mở KaiPass để lưu đăng nhập này</string>
+    <string name="passkey_vault">Vault KaiPass</string>
+    <string name="passkey_unlock">Mở khoá KaiPass để dùng passkey</string>
+    <string name="passkey_use_title">Đăng nhập bằng passkey</string>
+    <string name="passkey_save_title">Lưu passkey vào KaiPass</string>
+    <string name="passkey_saved">Đã lưu passkey. Mở KaiPass để đồng bộ lên Drive.</string>
+    <string name="passkey_locked">KaiPass đã khoá. Hãy thử lại.</string>
+    <string name="passkey_app_refused">Trang %1$s không cho phép app này dùng passkey</string>
+    <string name="passkey_app_unchecked">Không kiểm tra được app này với %1$s. Hãy thử lại khi có mạng.</string>
+    <string name="passkey_browser_refused">KaiPass không nhận yêu cầu passkey từ app này</string>
+    <string name="passkey_unsupported">Trang này cần loại passkey KaiPass chưa hỗ trợ</string>
+    <string name="passkey_failed">KaiPass không dùng được passkey này</string>
+    <string name="passkey_exists">KaiPass đã có passkey cho tài khoản này</string>
 </resources>

@@ -26,6 +26,19 @@ export function AndroidAutofillSettings() {
             {on ? 'Đổi' : 'Bật'}
           </button>
         </Setting>
+        {info?.passkeys?.supported && (
+          <Setting
+            icon="finger"
+            on={info.passkeys.enabled}
+            title="Passkey"
+            info="KaiPass lưu và dùng passkey trong app, trình duyệt, và khi bạn quét mã QR để đăng nhập trên máy khác."
+            sub={info.passkeys.enabled ? 'KaiPass đang giữ passkey' : 'Chưa bật trong cài đặt của máy'}
+          >
+            <button type="button" className={info.passkeys.enabled ? '' : 'primary'} onClick={() => void native('openPasskeySettings')}>
+              {info.passkeys.enabled ? 'Đổi' : 'Bật'}
+            </button>
+          </Setting>
+        )}
       </div>
       <ul className="help-list">
         <li>
@@ -39,6 +52,13 @@ export function AndroidAutofillSettings() {
         <li>
           <strong>Mã OTP:</strong> ô OTP được điền mã mới nhất. Nếu trang hỏi OTP ở bước sau, mã đã được chép sẵn, chỉ cần dán.
         </li>
+        {info?.passkeys?.supported && (
+          <li>
+            <strong>Passkey:</strong> khi app hoặc trang đề nghị tạo hay dùng passkey, chọn <em>KaiPass</em> trên bảng của
+            Android rồi chạm vân tay. Đăng nhập trên máy tính khác: chọn "dùng điện thoại", quét mã QR bằng camera, rồi chọn
+            passkey trong KaiPass.
+          </li>
+        )}
         <li>
           <strong>Khi vault đang khoá:</strong> chạm <em>Mở khoá KaiPass</em>, mở bằng vân tay, rồi chọn tài khoản.
         </li>

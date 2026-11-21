@@ -71,6 +71,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.autofill:autofill:1.3.0")
+    implementation("androidx.credentials:credentials:1.5.0")
     implementation("com.google.android.gms:play-services-auth:21.4.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { forget, recall, remember, writeFillIndex } from './ext/browser';
 import { BUMP_KEY } from './ext/match';
 import { preloadGoogle } from './lib/drive';
-import { native } from './lib/android';
+import { native, onNative, type NewPasskey } from './lib/android';
+import { keepPasskey } from './lib/passkeyKeep';
 import { onDesktop } from './lib/desktop';
 import { androidEntries } from './lib/androidIndex';
 import { isAndroid, isExtension, isPopup } from './lib/platform';
@@ -93,12 +94,31 @@ export default function App() {
   useEffect(() => {
     if (phase.k !== 'open' || !isAndroid) return;
     const { session } = phase;
-    const publish = () =>
-      void native('setFillIndex', { entries: androidEntries(session.vault), lockMinutes: autoLockMinutes() }).catch(() => {});
-    publish();
-    const unsubscribe = session.subscribe(publish);
+    const publish = () => native('setFillIndex', { entries: androidEntries(session.vault), lockMinutes: autoLockMinutes() }).catch(() => {});
+    // Passkeys made on the phone while KaiPass was closed or locked go into the vault first, so
+    // the list the phone gets already has them.
+    let busy = false;
+    const takeInPasskeys = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const waiting = await native<NewPasskey[]>('newPasskeys').catch(() => []);
+        if (waiting.length === 0) return;
+        let changed = false;
+        for (const w of waiting) changed = keepPasskey(session.vault, w) || changed;
+        if (changed) await session.commit();
+        await publish();
+        await native('passkeysDone', { ids: waiting.map((w) => w.passkey.credentialId) }).catch(() => {});
+      } finally {
+        busy = false;
+      }
+    };
+    void takeInPasskeys().then(publish, publish);
+    const unsubscribe = session.subscribe(() => void publish());
+    const offResume = onNative('resume', () => void takeInPasskeys());
     return () => {
       unsubscribe();
+      offResume();
       void native('clearFillIndex').catch(() => {});
     };
   }, [phase]);

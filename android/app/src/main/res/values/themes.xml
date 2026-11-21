@@ -11,6 +11,10 @@
         <item name="android:windowNoDisplay">true</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+    <style name="Theme.KaiPass.Clear" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
     <style name="Theme.KaiPass.Dialog" parent="android:Theme.Material.Light.Dialog.NoActionBar">
         <item name="android:colorAccent">@color/brand</item>
         <item name="android:windowMinWidthMajor">90%</item>

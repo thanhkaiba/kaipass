@@ -4,6 +4,8 @@
  * use. Each call is a JSON message with an id; the reply carries the same id. The app also sends
  * events (no id), e.g. when autofill hands over a login to save.
  */
+import type { Passkey } from './passkey';
+
 type Port = { postMessage(message: string): void; onmessage: ((e: { data: string }) => void) | null };
 
 const port: Port | undefined =
@@ -60,6 +62,8 @@ export interface AndroidInfo {
   sha1: string;
   autofill: { supported: boolean; enabled: boolean };
   bio: { available: boolean; enrolled: boolean };
+  /** Android 14+: KaiPass as a passkey provider, and whether the user switched it on. */
+  passkeys?: { supported: boolean; enabled: boolean };
 }
 
 export const androidInfo = () => native<AndroidInfo>('info');
@@ -75,6 +79,13 @@ export interface PendingSave {
   appLabel: string;
   username: string;
   password: string;
+}
+
+/** A passkey made on the phone (through Android's passkey sheet) that the vault does not hold yet. */
+export interface NewPasskey {
+  passkey: Passkey;
+  rpName: string;
+  origin: string;
 }
 
 const b64 = (bytes: Uint8Array) => {

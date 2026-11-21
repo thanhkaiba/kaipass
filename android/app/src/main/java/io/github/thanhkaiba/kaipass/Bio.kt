@@ -81,6 +81,20 @@ object Bio {
         p.authenticate(info, BiometricPrompt.CryptoObject(cipher))
     }
 
+    /** Asks the user to prove it is them (fingerprint, face or the phone's PIN); nothing is decrypted. */
+    fun confirm(a: FragmentActivity, title: String, subtitle: String, ok: () -> Unit, fail: (String) -> Unit) {
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(authenticators())
+            .apply { if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) setNegativeButtonText(a.getString(R.string.bio_cancel)) }
+            .build()
+        BiometricPrompt(a, ContextCompat.getMainExecutor(a), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = ok()
+            override fun onAuthenticationError(code: Int, message: CharSequence) = fail(message.toString())
+        }).authenticate(info)
+    }
+
     fun enroll(a: FragmentActivity, password: String, ok: () -> Unit, fail: (String) -> Unit) {
         disable(a)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, newKey()) }
